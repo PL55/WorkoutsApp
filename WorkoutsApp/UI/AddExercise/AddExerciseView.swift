@@ -122,10 +122,3 @@ struct AddExerciseView: View {
         }
     }
 }
-
-private extension Loadable {
-    var isLoading: Bool {
-        if case .isLoading = self { return true }
-        return false
-    }
-}
