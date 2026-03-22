@@ -38,7 +38,9 @@ import SwiftData
         let run   = ExerciseLibraryEntry(name: "Run", type: .cardio)
 
         vm.exerciseType = .cardio
-        vm.name = "r"   // partial match for "Run" only
+        // Use a non-empty name that matches only "Run". Using "" causes ExerciseLibraryEntry
+        // @Model properties to be unreliable in parallel test runs without a ModelContext.
+        vm.name = "r"
         vm.updateSuggestions(from: [squat, run])
 
         #expect(vm.filteredSuggestions.count == 1)
