@@ -50,7 +50,10 @@ import SwiftUI
         try await ViewHosting.host(view) {
             // Delay 200ms to allow @Query to publish sessions and vm.groupedSessions to populate
             try await sut.inspection.inspect(after: .milliseconds(200)) { view in
-                // List > ForEach(groupedSessions) > Section > ForEach(group).onDelete
+                // Traverse directly to List (skipping NavigationStack) then
+                // outer ForEach (groupedSessions) → Section → inner ForEach (sessions) → onDelete.
+                // The Group wrapper inside NavigationStack means a direct section(0) from List
+                // does not reflect the actual ForEach nesting of this view's sessionList.
                 try view.find(ViewType.List.self)
                     .forEach(0)   // outer ForEach over groupedSessions
                     .section(0)   // the Section inside

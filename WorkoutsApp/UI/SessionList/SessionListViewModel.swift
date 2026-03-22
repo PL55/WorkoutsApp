@@ -5,6 +5,7 @@ import Foundation
 /// Holds memoized state derived from the session list.
 /// Recomputes groupedSessions only when sessions change, not on every render.
 @Observable
+@MainActor
 final class SessionListViewModel {
 
     /// Sessions grouped by calendar day, sorted most-recent-first.
@@ -17,7 +18,9 @@ final class SessionListViewModel {
         self.interactor = interactor
     }
 
-    /// Called via `.onChange(of: sessions, initial: true)` — regroups and sorts.
+    /// Called via `.onChange(of: sessions, initial: true)` — regroups and sorts by day.
+    /// Within-group ordering is preserved from the incoming `sessions` array,
+    /// which is pre-sorted by `@Query(sort: \WorkoutSession.date, order: .reverse)` in the view.
     func sessionsDidChange(_ sessions: [WorkoutSession]) {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.date) }
