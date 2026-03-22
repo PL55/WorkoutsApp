@@ -8,6 +8,7 @@ struct SessionListView: View {
     @Query(sort: \WorkoutSession.date, order: .reverse)
     private var sessions: [WorkoutSession]
 
+    @State private var vm = SessionListViewModel()
     @State private var navigationPath = NavigationPath()
     @State private var routingState: Routing = .init()
     @Environment(\.injected) private var injected: DIContainer
@@ -18,7 +19,11 @@ struct SessionListView: View {
         NavigationStack(path: $navigationPath) {
             Group {
                 if sessions.isEmpty {
-                    ContentUnavailableView("No Workouts Yet", systemImage: "dumbbell", description: Text("Tap + to log your first workout"))
+                    ContentUnavailableView(
+                        "No Workouts Yet",
+                        systemImage: "dumbbell",
+                        description: Text("Tap + to log your first workout")
+                    )
                 } else {
                     sessionList
                 }
@@ -43,12 +48,18 @@ struct SessionListView: View {
                 ExerciseProgressView(exerciseName: dest.exerciseName)
             }
         }
+        .onAppear {
+            vm.configure(interactor: injected.interactors.workouts)
+        }
+        .onChange(of: sessions, initial: true) { _, new in
+            vm.sessionsDidChange(new)
+        }
         .onReceive(inspection.notice) { self.inspection.visit(self, $0) }
     }
 
     private var sessionList: some View {
         List {
-            ForEach(groupedSessions, id: \.key) { date, group in
+            ForEach(vm.groupedSessions, id: \.key) { date, group in
                 Section(header: Text(date, style: .date)) {
                     ForEach(group) { session in
                         NavigationLink(value: session) {
@@ -63,17 +74,11 @@ struct SessionListView: View {
         }
     }
 
-    private var groupedSessions: [(key: Date, value: [WorkoutSession])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.date) }
-        return grouped.sorted { $0.key > $1.key }
-    }
-
     private func deleteSession(group: [WorkoutSession], offsets: IndexSet) {
         for index in offsets {
             let session = group[index]
             Task {
-                try? await injected.interactors.workouts.deleteSession(id: session.id)
+                try? await vm.deleteSession(id: session.id)
             }
         }
     }
@@ -85,7 +90,6 @@ extension SessionList {
     struct Routing: Equatable {}
 }
 
-// Alias so AppState.ViewRouting can reference SessionList
 typealias SessionList = SessionListView
 
 // MARK: - Navigation Destinations
