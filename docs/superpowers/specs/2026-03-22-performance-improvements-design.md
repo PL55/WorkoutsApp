@@ -25,15 +25,26 @@ The app has several performance issues that will degrade as data grows:
 
 Introduce `@Observable` ViewModels for three views. Views own their VM via `@State`. Views still own `@Query` and pass results into the VM via `onChange`. VMs hold the interactor reference and expose computed/cached state.
 
+**ViewModel initialization pattern:** `@Environment` is not available at `@State` init time. ViewModels are initialized with a placeholder interactor (`StubWorkoutsInteractor`) and then configured with the real interactor in `.onAppear` or `.task`. Each VM exposes a `configure(interactor:)` method for this purpose. Since operations require user interaction (taps, form submission), the brief window between init and configuration has no behavioral impact.
+
+```swift
+// Pattern used by all three VMs:
+@State private var vm = SessionListViewModel()
+
+.task {
+    vm.configure(interactor: injected.interactors.workouts)
+}
+```
+
 #### SessionListViewModel
 
 ```swift
 @Observable
 final class SessionListViewModel {
     private(set) var groupedSessions: [(key: Date, value: [WorkoutSession])] = []
-    private let interactor: any WorkoutsInteractor
+    private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
 
-    init(interactor: any WorkoutsInteractor) {
+    func configure(interactor: any WorkoutsInteractor) {
         self.interactor = interactor
     }
 
@@ -50,8 +61,9 @@ final class SessionListViewModel {
 ```
 
 **View integration:**
-- `SessionListView` creates `@State private var vm: SessionListViewModel` initialized with the interactor from the DI container.
-- Uses `.onChange(of: sessions)` to call `vm.sessionsDidChange(sessions)`.
+- `SessionListView` creates `@State private var vm = SessionListViewModel()`.
+- Uses `.task { vm.configure(interactor: injected.interactors.workouts) }` to inject the real interactor.
+- Uses `.onChange(of: sessions, initial: true)` to call `vm.sessionsDidChange(sessions)`.
 - Body reads `vm.groupedSessions` (a stored property, no recomputation).
 
 #### SessionDetailViewModel
@@ -60,9 +72,9 @@ final class SessionListViewModel {
 @Observable
 final class SessionDetailViewModel {
     private(set) var allExercises: [any AnalyticsTrackable] = []
-    private let interactor: any WorkoutsInteractor
+    private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
 
-    init(interactor: any WorkoutsInteractor) {
+    func configure(interactor: any WorkoutsInteractor) {
         self.interactor = interactor
     }
 
@@ -77,8 +89,9 @@ final class SessionDetailViewModel {
 ```
 
 **View integration:**
-- `SessionDetailView` creates the VM at init.
-- Calls `vm.updateExercises(strength:cardio:)` in `onAppear` and `onChange` of the session's exercise arrays.
+- `SessionDetailView` creates `@State private var vm = SessionDetailViewModel()`.
+- Uses `.task { vm.configure(interactor: injected.interactors.workouts) }`.
+- Calls `vm.updateExercises(strength:cardio:)` in `.onChange(of: session.strengthExercises, initial: true)` (and same for cardio).
 - Body reads `vm.allExercises`.
 
 #### AddExerciseViewModel
@@ -95,12 +108,15 @@ final class AddExerciseViewModel {
     var saveState: Loadable<UUID> = .notRequested
     private(set) var filteredSuggestions: [ExerciseLibraryEntry] = []
 
-    private let interactor: any WorkoutsInteractor
+    private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
     private let sessionID: UUID?
 
-    init(interactor: any WorkoutsInteractor, sessionID: UUID?) {
-        self.interactor = interactor
+    init(sessionID: UUID?) {
         self.sessionID = sessionID
+    }
+
+    func configure(interactor: any WorkoutsInteractor) {
+        self.interactor = interactor
     }
 
     func updateSuggestions(from library: [ExerciseLibraryEntry]) {
@@ -119,12 +135,21 @@ final class AddExerciseViewModel {
         case .cardio:
             input = .cardio(name: name, durationMinutes: durationMinutes)
         }
-        $saveState.load {
-            try await interactor.addExercise(to: sessionID, input: input)
+        let cancelBag = CancelBag()
+        saveState.setIsLoading(cancelBag: cancelBag)
+        let task = Task {
+            do {
+                saveState = .loaded(try await interactor.addExercise(to: sessionID, input: input))
+            } catch {
+                saveState = .failed(error)
+            }
         }
+        task.store(in: cancelBag)
     }
 }
 ```
+
+**Note on Loadable in ViewModels:** The `LoadableSubject.load {}` extension operates on `Binding<Loadable<T>>`, which is not available inside an `@Observable` class. ViewModels use `Loadable` directly via manual `Task` + state assignment as shown above. Views that still use `@State var loadable: Loadable<T>` (like `ExerciseProgressView`) can continue using `$loadableState.load {}`.
 
 **View integration:**
 - `AddExerciseView` creates the VM at init.
@@ -143,61 +168,35 @@ New files:
 - `WorkoutsApp/UI/SessionDetail/SessionDetailViewModel.swift`
 - `WorkoutsApp/UI/AddExercise/AddExerciseViewModel.swift`
 
-### 2. SwiftData Indexes + Schema Migration
+### 2. SwiftData Indexes
 
-#### Index annotations
+#### Index declarations
 
-Add `@Attribute(.index)` to the `name` property on both exercise models:
+Add `#Index` macro to both exercise models. SwiftData's `#Index` macro is declared at the `@Model` body level (not as a property attribute):
 
 ```swift
 // StrengthExercise.swift
-@Attribute(.index) var name: String
+@Model
+final class StrengthExercise {
+    #Index<StrengthExercise>([\.name])
+    // ... existing properties unchanged
+}
 
 // CardioExercise.swift
-@Attribute(.index) var name: String
-```
-
-#### Schema versioning
-
-- Rename current `AppSchema` to `AppSchemaV1`
-- Create `AppSchemaV2` with the indexed models
-- Create `AppMigrationPlan` with a lightweight migration stage from V1 to V2
-- Wire the migration plan into `ModelContainer` configuration
-
-```swift
-enum AppSchemaV1: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
-    static var models: [any PersistentModel.Type] {
-        [WorkoutSession.self, StrengthExercise.self, CardioExercise.self, ExerciseLibraryEntry.self]
-    }
-}
-
-enum AppSchemaV2: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 1, 0)
-    static var models: [any PersistentModel.Type] {
-        [WorkoutSession.self, StrengthExercise.self, CardioExercise.self, ExerciseLibraryEntry.self]
-    }
-}
-
-enum AppMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [AppSchemaV1.self, AppSchemaV2.self] }
-    static var stages: [MigrationStage] {
-        [.lightweight(fromVersion: AppSchemaV1.self, toVersion: AppSchemaV2.self)]
-    }
+@Model
+final class CardioExercise {
+    #Index<CardioExercise>([\.name])
+    // ... existing properties unchanged
 }
 ```
 
-#### ModelContainer update
+#### Schema migration approach
 
-Pass the migration plan to `ModelContainer`:
+Adding indexes is a lightweight schema change that SwiftData handles automatically. No `VersionedSchema` or `SchemaMigrationPlan` is needed — SwiftData detects the new index annotations and creates them on the next store open.
 
-```swift
-static func appModelContainer(inMemoryOnly: Bool = false, isStub: Bool = false) throws -> ModelContainer {
-    let schema = AppSchemaV2.schema
-    let config = ModelConfiguration(isStub ? "stub" : nil, schema: schema, isStoredInMemoryOnly: inMemoryOnly)
-    return try ModelContainer(for: schema, migrationPlan: AppMigrationPlan.self, configurations: [config])
-}
-```
+The existing `AppSchema` and `ModelContainer` configuration remain unchanged. If automatic migration fails on a user's device, the existing error recovery UI (Section 3) will surface the error with a retry option.
+
+**Note:** `ModelContainer.stub` remains available for tests and the `DIContainer` default `@Entry` value. It is NOT removed — only the silent production fallback in `AppEnvironment` is eliminated.
 
 ### 3. Async Bootstrap + Error Recovery UI
 
@@ -235,7 +234,15 @@ Introduce a `RootView` that manages launch state:
 struct RootView: View {
     @State private var launchState: Loadable<AppEnvironment> = .notRequested
 
+    let inspection = Inspection<Self>()
+
     var body: some View {
+        content
+            .onReceive(inspection.notice) { self.inspection.visit(self, $0) }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch launchState {
         case .notRequested, .isLoading:
             ProgressView("Loading...")
@@ -264,20 +271,31 @@ struct RootView: View {
     }
 
     private func bootstrap() {
-        $launchState.load {
-            try await AppEnvironment.bootstrap()
+        let cancelBag = CancelBag()
+        launchState.setIsLoading(cancelBag: cancelBag)
+        let task = Task {
+            do {
+                launchState = .loaded(try await AppEnvironment.bootstrap())
+            } catch {
+                launchState = .failed(error)
+            }
         }
+        task.store(in: cancelBag)
     }
 }
 ```
 
+**Note:** `RootView.bootstrap()` uses the manual `Task` + `Loadable` pattern (same as `AddExerciseViewModel.save()`) since `$launchState.load {}` requires a `Binding` and `@State` in a top-level view is acceptable here. However, for consistency with the ViewModel approach, we use the explicit pattern.
+
 #### AppDelegate / MainApp simplification
 
-`AppDelegate` no longer holds the environment. `MainApp.body` just renders `RootView()`. The `isRunningTests` check moves into `RootView` or stays in `MainApp`:
+`AppDelegate` no longer holds the environment. `@UIApplicationDelegateAdaptor` is retained in `MainApp` so that `AppDelegate` can still handle `UIApplicationDelegate` lifecycle hooks if needed in the future, but it becomes a minimal shell. `MainApp.body` renders `RootView()`:
 
 ```swift
 @main
 struct MainApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
             if ProcessInfo.processInfo.isRunningTests {
@@ -290,7 +308,17 @@ struct MainApp: App {
 }
 ```
 
-`AppDelegate` can be retained if needed for other `UIApplicationDelegate` hooks, but it no longer owns `AppEnvironment`.
+`AppDelegate` is simplified to:
+
+```swift
+@MainActor
+final class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        return true
+    }
+}
+```
 
 ### 4. CancelBag Fix
 
@@ -326,10 +354,8 @@ Uses stable error identity (domain + code) instead of user-facing description st
 | `UI/SessionDetail/SessionDetailView.swift` | Refactor to use VM |
 | `UI/AddExercise/AddExerciseViewModel.swift` | **New** — `@Observable` VM |
 | `UI/AddExercise/AddExerciseView.swift` | Refactor to use VM |
-| `Repositories/Models/StrengthExercise.swift` | Add `@Attribute(.index)` on `name` |
-| `Repositories/Models/CardioExercise.swift` | Add `@Attribute(.index)` on `name` |
-| `Repositories/Models/AppSchema.swift` | Versioned schemas + migration plan |
-| `Repositories/Database/ModelContainer.swift` | Wire migration plan |
+| `Repositories/Models/StrengthExercise.swift` | Add `#Index` on `name` |
+| `Repositories/Models/CardioExercise.swift` | Add `#Index` on `name` |
 | `DependencyInjection/AppEnvironment.swift` | Make `bootstrap()` async throws |
 | `Core/App.swift` | Simplify to use `RootView` |
 | `Core/AppDelegate.swift` | Remove environment ownership |
@@ -346,12 +372,16 @@ Uses stable error identity (domain + code) instead of user-facing description st
 | `UI/Common/Query+Search.swift` | Not involved |
 | `Interactors/WorkoutsInteractor.swift` | No API changes |
 | `Repositories/Database/WorkoutsDBRepository.swift` | No changes (indexes are on models) |
+| `Repositories/Models/AppSchema.swift` | No changes (lightweight index migration is automatic) |
+| `Repositories/Database/ModelContainer.swift` | No changes (no migration plan to wire) |
+| `DependencyInjection/DIContainer.swift` | No changes (`ModelContainer.stub` and `@Entry` default remain) |
 
 ## Test Impact
 
-- **New unit tests** for `SessionListViewModel`, `SessionDetailViewModel`, `AddExerciseViewModel` — test the computation logic (grouping, filtering, save coordination) without SwiftUI or SwiftData.
-- **Update existing UI tests** — views now delegate to VMs; mocking approach changes slightly (inject mock interactor into VM instead of via DI container in some cases).
-- **Existing repository tests** — unaffected. Schema migration should be tested with a migration test using the versioned schemas.
+- **New unit tests** for `SessionListViewModel`, `SessionDetailViewModel`, `AddExerciseViewModel` — test the computation logic (grouping, filtering, save coordination) without SwiftUI or SwiftData. VMs are plain `@Observable` classes, so tests just call methods and assert stored properties.
+- **Update existing UI tests** — views now delegate to VMs; inject mock interactor via `vm.configure(interactor:)` instead of only through DI container.
+- **New UI test** for `RootView` — include `Inspection` hook for ViewInspector consistency with existing test patterns. Test loading, loaded, and failed states.
+- **Existing repository tests** — unaffected.
 - **Loadable tests** — update error equality assertions.
 
 ## Out of Scope
