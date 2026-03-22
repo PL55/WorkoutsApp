@@ -10,6 +10,7 @@
 		4819F10E2CDF5819003CA0AE /* EnvironmentOverrides in Frameworks */ = {isa = PBXBuildFile; productRef = 4819F10D2CDF5819003CA0AE /* EnvironmentOverrides */; };
 		4819F1172CDF6DD4003CA0AE /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = 4819F1162CDF6DD4003CA0AE /* ViewInspector */; };
 		B43E3DCC2F6F2421008E59C0 /* CLAUDE 2.md in Resources */ = {isa = PBXBuildFile; fileRef = B43E3DCB2F6F2421008E59C0 /* CLAUDE 2.md */; };
+		B4A113DB2F705C76009BADAC /* .gitignore 2 in Resources */ = {isa = PBXBuildFile; fileRef = B4A113DA2F705C76009BADAC /* .gitignore 2 */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,6 +27,7 @@
 		488734172CDCA2DB00B400A3 /* WorkoutsApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorkoutsApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		488734292CDCA2DD00B400A3 /* UnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UnitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B43E3DCB2F6F2421008E59C0 /* CLAUDE 2.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "CLAUDE 2.md"; sourceTree = "<group>"; };
+		B4A113DA2F705C76009BADAC /* .gitignore 2 */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".gitignore 2"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -68,6 +70,7 @@
 				4887342C2CDCA2DD00B400A3 /* UnitTests */,
 				488734182CDCA2DB00B400A3 /* Products */,
 				B43E3DCB2F6F2421008E59C0 /* CLAUDE 2.md */,
+				B4A113DA2F705C76009BADAC /* .gitignore 2 */,
 			);
 			sourceTree = "<group>";
 		};
@@ -181,6 +184,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B4A113DB2F705C76009BADAC /* .gitignore 2 in Resources */,
 				B43E3DCC2F6F2421008E59C0 /* CLAUDE 2.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
