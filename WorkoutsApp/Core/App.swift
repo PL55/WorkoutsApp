@@ -8,25 +8,10 @@ struct MainApp: App {
 
     var body: some Scene {
         WindowGroup {
-            appDelegate.rootView
-        }
-    }
-}
-
-extension AppEnvironment {
-    var rootView: some View {
-        VStack {
-            if isRunningTests {
+            if ProcessInfo.processInfo.isRunningTests {
                 Text("Running unit tests")
             } else {
-                SessionListView()
-                    .modifier(RootViewAppearance())
-                    .modelContainer(modelContainer)
-                    .inject(diContainer)
-                if modelContainer.isStub {
-                    Text("⚠️ There is an issue with local database")
-                        .font(.caption2)
-                }
+                RootView()
             }
         }
     }
