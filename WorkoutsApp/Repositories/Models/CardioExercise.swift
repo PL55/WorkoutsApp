@@ -4,6 +4,8 @@ import Foundation
 
 @Model
 final class CardioExercise {
+    #Index<CardioExercise>([\.name])
+
     var id: UUID
     var name: String
     var durationMinutes: Double
