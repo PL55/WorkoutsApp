@@ -144,4 +144,21 @@ import ViewInspector
     @Test func valueIsMissing() {
         #expect(ValueIsMissingError().localizedDescription == "Data is missing")
     }
+
+    @Test func cancelBagActuallyCancelsTasks() async {
+        let bag = CancelBag()
+        let exp = TestExpectation()
+        let task = Task {
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                // Task.sleep throws CancellationError when cancelled
+                exp.fulfill()
+            }
+        }
+        task.store(in: bag)
+        bag.cancel()
+        await exp.fulfillment()
+        // If we reach here, the task was actually cancelled
+    }
 }
