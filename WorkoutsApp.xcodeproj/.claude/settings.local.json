@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(xcrun simctl:*)",
+      "Bash(xcodebuild test:*)",
+      "Bash(xcodebuild -showsdks)",
+      "Bash(xcodebuild build:*)",
+      "Bash(xcodebuild -scheme WorkoutsApp -showdestinations)",
+      "Bash(xcodebuild -showdestinations -scheme WorkoutsApp -project /Users/pratiklahiri/Desktop/repos/hello-world/WorkoutsApp.xcodeproj)",
+      "Bash(xcodebuild -scheme WorkoutsApp -showdestinations -project /Users/pratiklahiri/Desktop/repos/hello-world/WorkoutsApp.xcodeproj)",
+      "Bash(rm -f \"WorkoutsApp/Repositories/Models/Country.swift\" \"WorkoutsApp/Repositories/Models/CountryDetails.swift\" \"WorkoutsApp/Repositories/Models/CountryCurrency.swift\" \"WorkoutsApp/Repositories/Models/MockedData.swift\" \"WorkoutsApp/Repositories/WebAPI/CountriesWebRepository.swift\" \"WorkoutsApp/Repositories/WebAPI/ImagesWebRepository.swift\" \"WorkoutsApp/Repositories/WebAPI/PushTokenWebRepository.swift\" \"WorkoutsApp/Repositories/WebAPI/WebRepository.swift\" \"WorkoutsApp/Interactors/CountriesInteractor.swift\" \"WorkoutsApp/Interactors/ImagesInteractor.swift\" \"WorkoutsApp/Interactors/UserPermissionsInteractor.swift\" \"WorkoutsApp/Core/DeepLinksHandler.swift\" \"WorkoutsApp/Core/PushNotificationsHandler.swift\" \"WorkoutsApp/Core/SystemEventsHandler.swift\")",
+      "Bash(rm -rf \"WorkoutsApp/UI/CountriesList\" \"WorkoutsApp/UI/CountryDetails\")",
+      "Bash(rm -f \"UnitTests/Mocks/MockedWebRepositories.swift\" \"UnitTests/Mocks/MockedSystemEventsHandler.swift\" \"UnitTests/Mocks/MockedSystemPermissions.swift\" \"UnitTests/Mocks/Interactors/CountriesInteractorTests.swift\" \"UnitTests/Mocks/Interactors/UserPermissionsInteractorTests.swift\" \"UnitTests/Mocks/Interactors/ImagesInteractorTests.swift\" \"UnitTests/UI/ImageViewTests.swift\" \"UnitTests/UI/CountriesListTests.swift\" \"UnitTests/UI/DeepLinkUITests.swift\" \"UnitTests/UI/ModalFlagViewTests.swift\" \"UnitTests/Repositories/PushTokenWebRepositoryTests.swift\" \"UnitTests/Repositories/ImageWebRepositoryTests.swift\" \"UnitTests/Repositories/CountriesWebRepositoryTests.swift\" \"UnitTests/Repositories/WebRepositoryTests.swift\" \"UnitTests/Repositories/CountriesDBRepositoryTests.swift\" \"UnitTests/System/DeepLinksHandlerTests.swift\" \"UnitTests/System/PushNotificationsHandlerTests.swift\")",
+      "Bash(rm -rf \"UnitTests/Mocks/NetworkMocking\")",
+      "Bash(grep:*)"
+    ]
+  }
+}
