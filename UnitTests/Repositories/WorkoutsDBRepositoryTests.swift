@@ -100,4 +100,53 @@ import Foundation
         let entries = try await sut.progressEntries(for: "Test")
         #expect(entries.isEmpty)
     }
+
+    // MARK: - fetchSessions
+
+    @Test func fetchSessions_returnsAllSessionsAsDTO() async throws {
+        let input1 = ExerciseInput.strength(name: "Squat", sets: 3, reps: 5, weight: 100.0)
+        let input2 = ExerciseInput.cardio(name: "Run", durationMinutes: 30)
+        let id1 = try await sut.saveNewSession(date: .now, with: input1)
+        let id2 = try await sut.saveNewSession(date: .now, with: input2)
+        let sessions = try await sut.fetchSessions()
+        #expect(sessions.count == 2)
+        let ids = Set(sessions.map(\.id))
+        #expect(ids.contains(id1))
+        #expect(ids.contains(id2))
+    }
+
+    @Test func fetchSessions_sortedByDateDescending() async throws {
+        let older = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+        _ = try await sut.saveNewSession(date: older, with: .strength(name: "A", sets: 1, reps: 1, weight: 1))
+        _ = try await sut.saveNewSession(date: .now, with: .strength(name: "B", sets: 1, reps: 1, weight: 1))
+        let sessions = try await sut.fetchSessions()
+        #expect(sessions[0].date > sessions[1].date)
+    }
+
+    @Test func fetchSession_returnsSingleSessionWithExercises() async throws {
+        let id = try await sut.saveNewSession(date: .now, with: .strength(name: "Bench", sets: 3, reps: 8, weight: 60))
+        try await sut.addExercise(.cardio(name: "Run", durationMinutes: 20), to: id)
+        let session = try await sut.fetchSession(id: id)
+        #expect(session.id == id)
+        #expect(session.strengthExercises.count == 1)
+        #expect(session.cardioExercises.count == 1)
+        #expect(session.strengthExercises[0].name == "Bench")
+        #expect(session.cardioExercises[0].name == "Run")
+    }
+
+    @Test func fetchSession_throwsWhenNotFound() async throws {
+        await #expect(throws: SessionNotFoundError.self) {
+            try await sut.fetchSession(id: UUID())
+        }
+    }
+
+    @Test func fetchLibraryEntries_returnsAllEntriesAsDTOs() async throws {
+        try await sut.upsertLibraryEntry(name: "Squat", type: .strength)
+        try await sut.upsertLibraryEntry(name: "Run", type: .cardio)
+        let entries = try await sut.fetchLibraryEntries()
+        #expect(entries.count == 2)
+        let names = Set(entries.map(\.name))
+        #expect(names.contains("Squat"))
+        #expect(names.contains("Run"))
+    }
 }
