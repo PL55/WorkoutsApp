@@ -1,75 +1,199 @@
-### Articles related to this project
+# WorkoutsApp
 
-* [Clean Architecture for SwiftUI](https://nalexn.github.io/clean-architecture-swiftui/?utm_source=nalexn_github)
-* [Programmatic navigation in SwiftUI project](https://nalexn.github.io/swiftui-deep-linking/?utm_source=nalexn_github)
-* [Separation of Concerns in Software Design](https://nalexn.github.io/separation-of-concerns/?utm_source=nalexn_github)
+A personal workout tracking iOS app built with Clean Architecture and SwiftUI. Log workout sessions with strength and cardio exercises, track progress over time, and browse a personal exercise library.
 
----
-
-# Clean Architecture for SwiftUI + Combine
-
-A demo project showcasing the setup of the SwiftUI app with Clean Architecture.
-
-The app uses the [restcountries.com](https://restcountries.com/) REST API to show the list of countries and details about them.
-
-**Check out [mvvm branch](https://github.com/nalexn/clean-architecture-swiftui/tree/mvvm) for the MVVM revision of the same app.**
-
-For the example of handling the **authentication state** in the app, you can refer to my [other tiny project](https://github.com/nalexn/uikit-swiftui) that harnesses the locks and keys principle for solving this problem.
-
-![platforms](https://img.shields.io/badge/platforms-iPhone%20%7C%20iPad%20%7C%20macOS-lightgrey) [![codecov](https://codecov.io/gh/nalexn/clean-architecture-swiftui/branch/master/graph/badge.svg)](https://codecov.io/gh/nalexn/clean-architecture-swiftui) [![codebeat badge](https://codebeat.co/badges/db33561b-0b2b-4ee1-a941-a08efbd0ebd7)](https://codebeat.co/projects/github-com-nalexn-clean-architecture-swiftui-master)
-
-<p align="center">
-  <img src="https://github.com/nalexn/blob_files/blob/master/images/countries_preview.png?raw=true" alt="Diagram"/>
-</p>
-
-## Key features
-* End of 2024 update: the project was fully revamped to use modern iOS stack technologies
-* Decoupled **Presentation**, **Business Logic**, and **Data Access** layers
-* Programmatic navigation. Push notifications with deep link
-* Redux-like centralized `AppState` as the single source of truth
-* Native SwiftUI dependency injection
-* Handling of the system events (such as `didBecomeActive`, `willResignActive`)
-* Full test coverage, including the UI (thanks to the [ViewInspector](https://github.com/nalexn/ViewInspector))
-* Simple yet flexible networking layer built on async - await
-* UI - vanilla **SwiftUI** + **Combine**
-* Data persistence with **SwiftData**
-
-## Architecture overview
-
-<p align="center">
-  <img src="https://github.com/nalexn/blob_files/blob/master/images/swiftui_arc_001.png?raw=true" alt="Diagram"/>
-</p>
-
-### Presentation Layer
-
-**SwiftUI views** that contain no business logic and are a function of the state.
-
-Side effects are triggered by the user's actions (such as a tap on a button) or view lifecycle event `onAppear` and are forwarded to the `Interactors`.
-
-State and business logic layer (`AppState` + `Interactors`) are natively injected into the view hierarchy with `@Environment`.
-
-### Business Logic Layer
-
-Business Logic Layer is represented by `Interactors`. 
-
-Interactors receive requests to perform work, such as obtaining data from an external source or making computations, but they never return data back directly.
-
-Instead, they forward the result to the `AppState` or to a `Binding`. The latter is used when the result of work (the data) is used locally by one View and does not belong to the `AppState`.
-
-[Previously](https://github.com/nalexn/clean-architecture-swiftui/releases/tag/1.0), this app did not use CoreData for persistence, and all loaded data were stored in the `AppState`.
-
-With the persistence layer in place we have a choice - either to load the DB content onto the `AppState`, or serve the data from `Interactors` on an on-demand basis through `Binding`.
-
-The first option suits best when you don't have a lot of data, for example, when you just store the last used login email in the `UserDefaults`. Then, the corresponding string value can just be loaded onto the `AppState` at launch and updated by the `Interactor` when the user changes the input.
-
-The second option is better when you have massive amounts of data and introduce a fully-fledged database for storing it locally.
-
-### Data Access Layer
-
-Data Access Layer is represented by `Repositories`.
-
-Repositories provide asynchronous API (`Publisher` from Combine) for making [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) operations on the backend or a local database. They don't contain business logic, neither do they mutate the `AppState`. Repositories are accessible and used only by the Interactors.
+**Platform**: iOS 18.0+ · **Language**: Swift 5 / Swift 6.1 toolchain · **Persistence**: SwiftData (fully local)
 
 ---
 
-[![Twitter](https://img.shields.io/badge/twitter-nallexn-blue)](https://twitter.com/nallexn) [![blog](https://img.shields.io/badge/blog-github-blue)](https://nalexn.github.io/?utm_source=nalexn_github)
+## Features
+
+- **Session logging** — Create workout sessions and add unlimited strength or cardio exercises
+- **Exercise library** — Auto-populated library of exercises you've used, with type-filtered autocomplete suggestions
+- **Progress tracking** — Per-exercise historical chart showing volume (strength) or duration (cardio) over time
+- **Offline-first** — All data stored locally on device in a SwiftData SQLite store; no accounts, no network
+
+---
+
+## Architecture Overview
+
+The app follows Clean Architecture in four layers, with a dedicated ViewModel layer sitting between views and interactors.
+
+```
+RootView (launch state machine)
+    │
+    ▼
+SwiftUI Views  ──onChange──▶  ViewModels (@Observable)
+    │                              │
+    │ @Query (reads)               │ interactor calls
+    │                              ▼
+    └──────────────────────▶  Interactors (business logic)
+                                   │
+                                   ▼
+                             Repositories (SwiftData)
+```
+
+### Presentation Layer — Views
+
+Views are pure functions of state. They own `@Query` for live SwiftData results and forward those results into their ViewModel via `onChange`. Side effects (save, delete) are delegated to the ViewModel.
+
+| View | Role |
+|---|---|
+| `RootView` | Launch state machine — shows loading/error/retry before the app is ready |
+| `SessionListView` | Session list grouped by date; pull-to-refresh; delete sessions |
+| `SessionDetailView` | All exercises for a session (strength + cardio unified) |
+| `AddExerciseView` | Form for adding exercises; type picker; autocomplete suggestions |
+| `ExerciseProgressView` | Historical analytics chart per exercise name |
+
+### ViewModel Layer
+
+`@Observable @MainActor` classes that own derived state and interactor references. The view body reads cached stored properties — no recomputation on unrelated renders.
+
+| ViewModel | Derived State |
+|---|---|
+| `SessionListViewModel` | `groupedSessions` — sessions keyed by calendar day, sorted newest-first |
+| `SessionDetailViewModel` | `allExercises` — strength + cardio merged into `[any AnalyticsTrackable]` |
+| `AddExerciseViewModel` | `filteredSuggestions` — library entries matching current type and name prefix; `saveState: Loadable<UUID>` |
+
+`ExerciseProgressView` has no ViewModel — it is already clean (`Loadable` + `onAppear`, no inline computation).
+
+### Business Logic Layer — Interactors
+
+`WorkoutsInteractor` is a protocol with one real implementation (`RealWorkoutsInteractor`) and one stub (`StubWorkoutsInteractor`). The interactor coordinates between the repository and the exercise library cache.
+
+### Data Access Layer — Repositories
+
+`WorkoutsDBRepository` is a protocol implemented by `MainDBRepository`, a `@ModelActor`-isolated SwiftData wrapper. All writes are async and thread-safe.
+
+---
+
+## Data Storage
+
+All data lives **locally on your device** in SwiftData (SQLite under the hood):
+
+| Model | What it stores |
+|---|---|
+| `WorkoutSession` | Date + name; parent of all exercises (cascade delete) |
+| `StrengthExercise` | Name, sets, reps, weight — linked to a session |
+| `CardioExercise` | Name, duration — linked to a session |
+| `ExerciseLibraryEntry` | Unique exercise names you've used (powers autocomplete) |
+
+`StrengthExercise` and `CardioExercise` both carry a SwiftData `#Index` on their `name` property, so progress queries scan the index rather than the full table as your log grows.
+
+Deleting the app permanently deletes all workout data — there is no iCloud sync or backup mechanism.
+
+---
+
+## App Launch Flow
+
+```
+App.swift
+  └─ RootView
+       ├─ .notRequested / .isLoading  →  ProgressView("Loading...")
+       │       │
+       │       └─ AppEnvironment.bootstrap() async throws
+       │               • creates ModelContainer (off main thread)
+       │               • wires MainDBRepository, RealWorkoutsInteractor, DIContainer
+       │
+       ├─ .loaded(env)  →  SessionListView (real container + DI injected)
+       │
+       └─ .failed(error)  →  Error screen + Retry button
+```
+
+Bootstrap errors are surfaced with a Retry button rather than silently falling back to an in-memory database — preventing silent data loss.
+
+---
+
+## Key Design Decisions
+
+### ViewModels alongside @Query
+
+`@Query` can't live inside an `@Observable` class — it requires a SwiftUI View context. Views own `@Query` and forward raw results into the ViewModel via `onChange`. The VM computes derived state once (on data change) and caches it. The view body reads a stored property, so unrelated renders don't re-run grouping or filtering logic.
+
+### Async bootstrap
+
+`ModelContainer` initialization previously blocked `@MainActor` on the first frame. Moving `bootstrap()` to `async throws` lets the main thread stay responsive while the SQLite store opens. `RootView` shows a `ProgressView` during this window.
+
+### Loadable<T> state machine
+
+Async operations are modeled as a four-state enum (`notRequested / isLoading / loaded / failed`) rather than separate `isLoading: Bool` and `error: Error?` flags. This eliminates impossible state combinations and maps cleanly to SwiftUI `switch` expressions.
+
+Inside `@Observable` ViewModels, `Loadable` is managed manually (`Task + [weak self]`) since the `$binding.load {}` helper requires a SwiftUI `Binding`.
+
+### Error equality by (domain, code)
+
+Comparing `Loadable.failed` errors via `localizedDescription` caused SwiftUI to skip re-renders when the error changed but the message stayed the same. Using `NSError.domain + NSError.code` provides stable, unique error identity.
+
+### CancelBag actually cancels
+
+`CancelBag.cancel()` previously called `removeAll()` without calling `.cancel()` on stored tasks, so background work continued running after "cancellation". Each stored item now receives a cooperative cancellation signal before its reference is removed.
+
+---
+
+## Building
+
+### Requirements
+
+- Xcode 16.0+
+- iOS 18.0+ simulator or physical device
+
+### Run
+
+```bash
+open WorkoutsApp.xcodeproj
+# Select an iOS Simulator (or paired device) → Cmd+R
+```
+
+SPM dependencies are fetched automatically:
+- [`ViewInspector`](https://github.com/nalexn/ViewInspector) 0.10.0+
+
+### Test
+
+```bash
+# In Xcode
+Cmd+U
+
+# CLI
+xcodebuild test -scheme WorkoutsApp \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+```
+
+Tests use the **Swift Testing** framework (`@Suite`, `@Test`, `#expect`).
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| SwiftData migration error at launch | Delete app from simulator → `Cmd+Shift+K` → rebuild |
+| `No such module 'ViewInspector'` | File → Packages → Reset Package Caches |
+| Build fails on macOS | Select an iOS Simulator destination — UIKit dependencies prevent macOS builds |
+| Build fails on device, works on simulator | Check `Signing & Capabilities` → verify Team is selected and device runs iOS 18.0+ |
+
+---
+
+## Project Structure
+
+```
+WorkoutsApp/
+├── Core/                   # App entry point, AppDelegate, AppState
+├── DependencyInjection/    # DIContainer, AppEnvironment (async bootstrap)
+├── Interactors/            # WorkoutsInteractor protocol + implementations
+├── Repositories/
+│   ├── Database/           # WorkoutsDBRepository + ModelContainer
+│   └── Models/             # SwiftData @Model types + ProgressEntry struct
+├── UI/
+│   ├── RootView.swift      # Launch state machine
+│   ├── SessionList/        # View + ViewModel
+│   ├── SessionDetail/      # View + ViewModel
+│   ├── AddExercise/        # View + ViewModel
+│   ├── ExerciseProgress/   # View only (no VM needed)
+│   └── Common/             # ErrorView, Query+Search, RootViewModifier
+└── Utilities/              # Store, Loadable, CancelBag, ExerciseType, ExerciseInput, Helpers
+
+UnitTests/
+├── Mocks/                  # MockedInteractors, MockedDBRepositories
+├── Interactors/            # WorkoutsInteractorTests
+├── Repositories/           # WorkoutsDBRepositoryTests (in-memory ModelContainer)
+├── UI/                     # ViewInspector tests + ViewModel unit tests
+└── Utilities/              # LoadableTests, HelpersTests
+```
