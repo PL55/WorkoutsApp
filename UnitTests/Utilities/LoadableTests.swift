@@ -144,4 +144,37 @@ import ViewInspector
     @Test func valueIsMissing() {
         #expect(ValueIsMissingError().localizedDescription == "Data is missing")
     }
+
+    @Test func failedEqualityUsesDomainAndCode() {
+        // Same domain+code, different description → EQUAL
+        let sameCode1 = NSError(domain: "test", code: 0, userInfo: [NSLocalizedDescriptionKey: "Message A"])
+        let sameCode2 = NSError(domain: "test", code: 0, userInfo: [NSLocalizedDescriptionKey: "Message B"])
+        #expect(Loadable<Int>.failed(sameCode1) == Loadable<Int>.failed(sameCode2))
+    }
+
+    @Test func failedInequalityUsesDomainAndCode() {
+        // Same description, different code → NOT EQUAL
+        let base       = NSError(domain: "test", code: 0, userInfo: [NSLocalizedDescriptionKey: "Same"])
+        let diffCode   = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Same"])
+        let diffDomain = NSError(domain: "other", code: 0, userInfo: [NSLocalizedDescriptionKey: "Same"])
+        #expect(Loadable<Int>.failed(base) != Loadable<Int>.failed(diffCode))
+        #expect(Loadable<Int>.failed(base) != Loadable<Int>.failed(diffDomain))
+    }
+
+    @Test func cancelBagActuallyCancelsTasks() async {
+        let bag = CancelBag()
+        let exp = TestExpectation()
+        let task = Task {
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                // Task.sleep throws CancellationError when cancelled
+                exp.fulfill()
+            }
+        }
+        task.store(in: bag)
+        bag.cancel()
+        await exp.fulfillment()
+        // If we reach here, the task was actually cancelled
+    }
 }

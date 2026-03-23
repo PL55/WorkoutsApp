@@ -4,15 +4,7 @@ import SwiftData
 
 struct AddExerciseView: View {
 
-    let sessionID: UUID?
-
-    @State private(set) var saveState: Loadable<UUID>
-    @State private var exerciseType: ExerciseType = .strength
-    @State private var name: String = ""
-    @State private var sets: Int = 3
-    @State private var reps: Int = 10
-    @State private var weight: Double = 0
-    @State private var durationMinutes: Double = 0
+    @State private var vm: AddExerciseViewModel
 
     @Query(sort: \ExerciseLibraryEntry.name)
     private var libraryEntries: [ExerciseLibraryEntry]
@@ -22,37 +14,51 @@ struct AddExerciseView: View {
 
     let inspection = Inspection<Self>()
 
-    init(sessionID: UUID?, saveState: Loadable<UUID> = .notRequested) {
-        self.sessionID = sessionID
-        self._saveState = .init(initialValue: saveState)
+    /// Production init — creates a fresh VM for the given session.
+    init(sessionID: UUID?) {
+        _vm = State(initialValue: AddExerciseViewModel(sessionID: sessionID))
+    }
+
+    /// Testing init — allows injecting a pre-configured VM (e.g. with a preset saveState).
+    init(sessionID: UUID?, viewModel: AddExerciseViewModel) {
+        _vm = State(initialValue: viewModel)
     }
 
     var body: some View {
         content
-            .navigationTitle(sessionID == nil ? "New Workout" : "Add Exercise")
+            .navigationTitle(vm.sessionID == nil ? "New Workout" : "Add Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(name.isEmpty || saveState.isLoading)
+                    Button("Save") { vm.save() }
+                        .disabled(vm.name.isEmpty || vm.saveState.isLoading)
                 }
             }
-            .onChange(of: saveState) { _, new in
+            .onChange(of: vm.saveState) { _, new in
                 if case .loaded = new { dismiss() }
+            }
+            .onChange(of: vm.name, initial: true) { _, _ in
+                vm.updateSuggestions(from: libraryEntries)
+            }
+            .onChange(of: vm.exerciseType) { _, _ in
+                vm.updateSuggestions(from: libraryEntries)
+            }
+            .task {
+                vm.configure(interactor: injected.interactors.workouts)
             }
             .onReceive(inspection.notice) { self.inspection.visit(self, $0) }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch saveState {
+        switch vm.saveState {
         case .isLoading:
             ProgressView()
         case .failed(let error):
-            ErrorView(error: error, retryAction: save)
+            ErrorView(error: error, retryAction: vm.save)
         default:
             form
         }
@@ -61,7 +67,7 @@ struct AddExerciseView: View {
     private var form: some View {
         Form {
             Section("Exercise Type") {
-                Picker("Type", selection: $exerciseType) {
+                Picker("Type", selection: $vm.exerciseType) {
                     ForEach(ExerciseType.allCases, id: \.self) { type in
                         Text(type.rawValue.capitalized).tag(type)
                     }
@@ -70,25 +76,22 @@ struct AddExerciseView: View {
             }
 
             Section("Exercise Name") {
-                TextField("e.g. Bench Press", text: $name)
+                TextField("e.g. Bench Press", text: $vm.name)
                     .autocorrectionDisabled()
-                let suggestions = libraryEntries.filter {
-                    $0.type == exerciseType && $0.name.localizedCaseInsensitiveContains(name) && $0.name != name
-                }
-                ForEach(suggestions) { entry in
-                    Button(entry.name) { name = entry.name }
+                ForEach(vm.filteredSuggestions) { entry in
+                    Button(entry.name) { vm.name = entry.name }
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if exerciseType == .strength {
+            if vm.exerciseType == .strength {
                 Section("Strength Details") {
-                    Stepper("Sets: \(sets)", value: $sets, in: 1...20)
-                    Stepper("Reps: \(reps)", value: $reps, in: 1...100)
+                    Stepper("Sets: \(vm.sets)", value: $vm.sets, in: 1...20)
+                    Stepper("Reps: \(vm.reps)", value: $vm.reps, in: 1...100)
                     HStack {
                         Text("Weight (lbs)")
                         Spacer()
-                        TextField("0", value: $weight, format: .number)
+                        TextField("0", value: $vm.weight, format: .number)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 80)
@@ -99,7 +102,7 @@ struct AddExerciseView: View {
                     HStack {
                         Text("Duration (min)")
                         Spacer()
-                        TextField("0", value: $durationMinutes, format: .number)
+                        TextField("0", value: $vm.durationMinutes, format: .number)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 80)
@@ -108,24 +111,7 @@ struct AddExerciseView: View {
             }
         }
     }
-
-    private func save() {
-        let input: ExerciseInput
-        switch exerciseType {
-        case .strength:
-            input = .strength(name: name, sets: sets, reps: reps, weight: weight)
-        case .cardio:
-            input = .cardio(name: name, durationMinutes: durationMinutes)
-        }
-        $saveState.load {
-            try await injected.interactors.workouts.addExercise(to: sessionID, input: input)
-        }
-    }
 }
 
-private extension Loadable {
-    var isLoading: Bool {
-        if case .isLoading = self { return true }
-        return false
-    }
-}
+// MARK: - Helpers
+// Loadable.isLoading is declared as an internal extension in Loadable.swift (added in Task 2).

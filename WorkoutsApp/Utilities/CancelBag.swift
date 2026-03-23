@@ -17,6 +17,7 @@ final class CancelBag {
     }
     
     func cancel() {
+        subscriptions.forEach { $0.cancel() }
         subscriptions.removeAll()
     }
     

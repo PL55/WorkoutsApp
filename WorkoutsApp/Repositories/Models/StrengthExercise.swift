@@ -4,6 +4,8 @@ import Foundation
 
 @Model
 final class StrengthExercise {
+    #Index<StrengthExercise>([\.name])
+
     var id: UUID
     var name: String
     var sets: Int

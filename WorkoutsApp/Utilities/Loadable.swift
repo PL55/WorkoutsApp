@@ -106,7 +106,9 @@ extension Loadable: Equatable where T: Equatable {
             return lhsV == rhsV && lhsC.isEqual(to: rhsC)
         case let (.loaded(lhsV), .loaded(rhsV)): return lhsV == rhsV
         case let (.failed(lhsE), .failed(rhsE)):
-            return lhsE.localizedDescription == rhsE.localizedDescription
+            let lhs = lhsE as NSError
+            let rhs = rhsE as NSError
+            return lhs.domain == rhs.domain && lhs.code == rhs.code
         default: return false
         }
     }
@@ -124,5 +126,13 @@ extension LoadableSubject {
             }
         }
         task.store(in: cancelBag)
+    }
+}
+
+extension Loadable {
+    /// Returns `true` while an async operation is in flight.
+    var isLoading: Bool {
+        if case .isLoading = self { return true }
+        return false
     }
 }
