@@ -48,7 +48,7 @@ struct SessionListView: View {
                 ExerciseProgressView(exerciseName: dest.exerciseName)
             }
         }
-        .onAppear {
+        .task {
             vm.configure(interactor: injected.interactors.workouts)
         }
         .onChange(of: sessions, initial: true) { _, new in

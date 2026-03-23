@@ -65,8 +65,8 @@ import SwiftData
 
         vm.save()
 
-        // Wait for the async Task inside save() to complete
-        try await Task.sleep(for: .milliseconds(1000))
+        // Allow the Task fired by save() to complete before asserting
+        try await Task.sleep(for: .milliseconds(100))
 
         mocked.verify()
         if case .loaded(let id) = vm.saveState {
@@ -90,7 +90,8 @@ import SwiftData
 
         vm.save()
 
-        try await Task.sleep(for: .milliseconds(1000))
+        // Allow the Task fired by save() to complete before asserting
+        try await Task.sleep(for: .milliseconds(100))
 
         mocked.verify()
         #expect(vm.saveState.error != nil)

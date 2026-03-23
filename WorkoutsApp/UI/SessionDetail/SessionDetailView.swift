@@ -37,7 +37,7 @@ struct SessionDetailView: View {
                 }
             }
         }
-        .onAppear {
+        .task {
             vm.configure(interactor: injected.interactors.workouts)
         }
         .onChange(of: session.strengthExercises, initial: true) { _, new in

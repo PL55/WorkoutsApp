@@ -46,7 +46,7 @@ struct AddExerciseView: View {
             .onChange(of: vm.exerciseType) { _, _ in
                 vm.updateSuggestions(from: libraryEntries)
             }
-            .onAppear {
+            .task {
                 vm.configure(interactor: injected.interactors.workouts)
             }
             .onReceive(inspection.notice) { self.inspection.visit(self, $0) }
