@@ -3,25 +3,43 @@ import Observation
 import Foundation
 
 /// Holds memoized state derived from the session list.
-/// Recomputes groupedSessions only when sessions change, not on every render.
+/// Owns session data via Loadable — views no longer use @Query.
 @Observable
 @MainActor
 final class SessionListViewModel {
 
+    /// Async state for session fetching.
+    private(set) var sessions: Loadable<[WorkoutSessionDTO]> = .notRequested
+
     /// Sessions grouped by calendar day, sorted most-recent-first.
-    private(set) var groupedSessions: [(key: Date, value: [WorkoutSession])] = []
+    private(set) var groupedSessions: [(key: Date, value: [WorkoutSessionDTO])] = []
 
     private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
 
-    /// Wire the real interactor. Call from `.onAppear` so it runs before any user interaction.
+    /// Wire the real interactor. Call from `.task`.
     func configure(interactor: any WorkoutsInteractor) {
         self.interactor = interactor
     }
 
-    /// Called via `.onChange(of: sessions, initial: true)` — regroups and sorts by day.
-    /// Within-group ordering is preserved from the incoming `sessions` array,
-    /// which is pre-sorted by `@Query(sort: \WorkoutSession.date, order: .reverse)` in the view.
-    func sessionsDidChange(_ sessions: [WorkoutSession]) {
+    /// Fetch sessions from the interactor. Uses manual Task + Loadable pattern.
+    func loadSessions() {
+        let cancelBag = CancelBag()
+        sessions.setIsLoading(cancelBag: cancelBag)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let fetched = try await interactor.fetchSessions()
+                sessions = .loaded(fetched)
+                sessionsDidChange(fetched)
+            } catch {
+                sessions = .failed(error)
+            }
+        }
+        task.store(in: cancelBag)
+    }
+
+    /// Regroups and sorts sessions by day. Called after fetch completes.
+    func sessionsDidChange(_ sessions: [WorkoutSessionDTO]) {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.date) }
         groupedSessions = grouped.sorted { $0.key > $1.key }
@@ -29,5 +47,6 @@ final class SessionListViewModel {
 
     func deleteSession(id: UUID) async throws {
         try await interactor.deleteSession(id: id)
+        loadSessions()
     }
 }

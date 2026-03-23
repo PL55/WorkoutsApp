@@ -16,6 +16,14 @@ struct SessionDetailView: View {
         self._navigationPath = navigationPath
     }
 
+    /// Convenience init used by Task 4 SessionList navigation (DTO path).
+    /// Creates an unmanaged WorkoutSession shell from the DTO for display purposes.
+    /// Task 5 will replace this with a fully DTO-driven implementation.
+    init(sessionDTO: WorkoutSessionDTO, navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
+        let shell = WorkoutSession(id: sessionDTO.id, date: sessionDTO.date)
+        self.init(session: shell, navigationPath: navigationPath)
+    }
+
     var body: some View {
         List {
             ForEach(vm.allExercises, id: \.id) { exercise in

@@ -2,7 +2,7 @@
 import SwiftUI
 
 struct SessionCell: View {
-    let session: WorkoutSession
+    let session: WorkoutSessionDTO
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

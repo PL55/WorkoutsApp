@@ -12,9 +12,9 @@ import Foundation
         let today = calendar.startOfDay(for: .now)
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
 
-        let s1 = WorkoutSession(id: UUID(), date: today)
-        let s2 = WorkoutSession(id: UUID(), date: today.addingTimeInterval(3600))
-        let s3 = WorkoutSession(id: UUID(), date: yesterday)
+        let s1 = WorkoutSessionDTO(id: UUID(), date: today, strengthExercises: [], cardioExercises: [])
+        let s2 = WorkoutSessionDTO(id: UUID(), date: today.addingTimeInterval(3600), strengthExercises: [], cardioExercises: [])
+        let s3 = WorkoutSessionDTO(id: UUID(), date: yesterday, strengthExercises: [], cardioExercises: [])
 
         vm.sessionsDidChange([s1, s2, s3])
 
@@ -37,10 +37,10 @@ import Foundation
         let today = calendar.startOfDay(for: .now)
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
 
-        let old = WorkoutSession(id: UUID(), date: yesterday)
-        let new = WorkoutSession(id: UUID(), date: today)
+        let old = WorkoutSessionDTO(id: UUID(), date: yesterday, strengthExercises: [], cardioExercises: [])
+        let new = WorkoutSessionDTO(id: UUID(), date: today, strengthExercises: [], cardioExercises: [])
 
-        vm.sessionsDidChange([old, new])  // old first intentionally
+        vm.sessionsDidChange([old, new])
 
         #expect(vm.groupedSessions[0].key == today)
         #expect(vm.groupedSessions[1].key == yesterday)
@@ -48,10 +48,53 @@ import Foundation
 
     @Test func deleteSessionCallsInteractor() async throws {
         let sessionID = UUID()
-        let mocked = MockedWorkoutsInteractor(expected: [.deleteSession(id: sessionID)])
+        let mocked = MockedWorkoutsInteractor(expected: [
+            .deleteSession(id: sessionID),
+            .fetchSessions
+        ])
+        mocked.fetchSessionsResult = .success([])
         let vm = SessionListViewModel()
         vm.configure(interactor: mocked)
         try await vm.deleteSession(id: sessionID)
+        // Wait for loadSessions() Task to complete
+        for _ in 0..<100 where vm.sessions.isLoading {
+            await Task.yield()
+        }
+        mocked.verify()
+    }
+
+    @Test func loadSessionsTransitionsToLoaded() async throws {
+        let dto = WorkoutSessionDTO(id: UUID(), date: .now, strengthExercises: [], cardioExercises: [])
+        let mocked = MockedWorkoutsInteractor(expected: [.fetchSessions])
+        mocked.fetchSessionsResult = .success([dto])
+        let vm = SessionListViewModel()
+        vm.configure(interactor: mocked)
+        vm.loadSessions()
+
+        for _ in 0..<100 where vm.sessions.isLoading {
+            await Task.yield()
+        }
+
+        if case .loaded(let sessions) = vm.sessions {
+            #expect(sessions.count == 1)
+        } else {
+            Issue.record("Expected .loaded, got \(vm.sessions)")
+        }
+        mocked.verify()
+    }
+
+    @Test func loadSessionsTransitionsToFailedOnError() async throws {
+        let mocked = MockedWorkoutsInteractor(expected: [.fetchSessions])
+        mocked.fetchSessionsResult = .failure(NSError.test)
+        let vm = SessionListViewModel()
+        vm.configure(interactor: mocked)
+        vm.loadSessions()
+
+        for _ in 0..<100 where vm.sessions.isLoading {
+            await Task.yield()
+        }
+
+        #expect(vm.sessions.error != nil)
         mocked.verify()
     }
 }
