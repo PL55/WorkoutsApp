@@ -65,8 +65,11 @@ import SwiftData
 
         vm.save()
 
-        // Allow the Task fired by save() to complete before asserting
-        try await Task.sleep(for: .milliseconds(100))
+        // `save()` sets .isLoading synchronously, then a Task updates saveState.
+        // Yield in a bounded loop so that inner Task gets main-actor time to complete.
+        for _ in 0..<100 where vm.saveState.isLoading {
+            await Task.yield()
+        }
 
         mocked.verify()
         if case .loaded(let id) = vm.saveState {
@@ -90,8 +93,11 @@ import SwiftData
 
         vm.save()
 
-        // Allow the Task fired by save() to complete before asserting
-        try await Task.sleep(for: .milliseconds(100))
+        // `save()` sets .isLoading synchronously, then a Task updates saveState.
+        // Yield in a bounded loop so that inner Task gets main-actor time to complete.
+        for _ in 0..<100 where vm.saveState.isLoading {
+            await Task.yield()
+        }
 
         mocked.verify()
         #expect(vm.saveState.error != nil)
