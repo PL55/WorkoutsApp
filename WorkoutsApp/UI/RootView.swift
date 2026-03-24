@@ -34,7 +34,6 @@ struct RootView: View {
         case .loaded(let env):
             SessionListView()
                 .modifier(RootViewAppearance())
-                .modelContainer(env.modelContainer)
                 .inject(env.diContainer)
         case .failed(let error):
             errorView(error)
