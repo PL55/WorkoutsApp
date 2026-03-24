@@ -23,10 +23,19 @@ A personal workout tracking iOS app built with Clean Architecture and SwiftUI. U
                   ▼
 ┌─────────────────────────────────────────┐
 │       PRESENTATION LAYER                │
-│   (SwiftUI Views + @Query)              │
+│   (SwiftUI Views — no @Query)           │
 │                                         │
 │  SessionListView, SessionDetailView     │
 │  AddExerciseView, ExerciseProgressView  │
+└─────────────────┬───────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────┐
+│           DTO LAYER                     │
+│   (Models/DTOs — plain structs)         │
+│                                         │
+│  WorkoutSessionDTO, StrengthExerciseDTO │
+│  CardioExerciseDTO, ExerciseLibraryDTO  │
 └─────────────────┬───────────────────────┘
                   │
                   ▼
@@ -56,10 +65,6 @@ A personal workout tracking iOS app built with Clean Architecture and SwiftUI. U
 └─────────────────────────────────────────┘
 ```
 
-### Note on @Query in Views
-
-Views use SwiftData's `@Query` macro directly for list data (sessions, exercises). This is a pragmatic deviation from strict Clean Architecture — it bypasses the repository layer for read operations. Write/delete operations still go through the ViewModel → Interactor → Repository path. The `Query+Search.swift` helper provides a `.query()` modifier for searchable `@Query` bindings.
-
 ### Note on ExerciseProgressView
 
 `ExerciseProgressView` has no ViewModel — it is already clean (`Loadable` + `onAppear`, no computation in body). It uses `$progressState.load { }` directly since it remains a `@State`-owned `Binding<Loadable<T>>`.
@@ -80,12 +85,12 @@ This eliminates the previous silent fallback: if `ModelContainer` creation fails
 
 ### Presentation Layer (`UI/`)
 
-SwiftUI views that are pure functions of state. Views own `@Query` for raw SwiftData results, pass those results into their ViewModel via `onChange`, and read computed/cached state back from the VM.
+SwiftUI views that are pure functions of state. Views have no SwiftData dependency — they receive and display DTO structs provided by their ViewModels, and read computed/cached state back from the VM.
 
 - `RootView` — Launch state machine; shown before `SessionListView` is rendered
-- `SessionListView` — Main list; uses `@Query` for `WorkoutSession`; delegates grouping + delete to `SessionListViewModel`
-- `SessionDetailView` — Shows all exercises in a session; delegates exercise list merging + delete to `SessionDetailViewModel`
-- `AddExerciseView` — Form for adding strength or cardio exercises; delegates suggestions, form state, and save to `AddExerciseViewModel`
+- `SessionListView` — Main list; delegates loading, grouping, and delete to `SessionListViewModel`; navigates via `SessionDetailDestination(sessionID:)`
+- `SessionDetailView` — Takes `sessionID: UUID`; delegates session loading, exercise list, and delete to `SessionDetailViewModel`
+- `AddExerciseView` — Form for adding strength or cardio exercises; delegates library entry loading, suggestions, form state, and save to `AddExerciseViewModel`
 - `ExerciseProgressView` — Historical progress entries; warns if exercise logged as both types; uses `Loadable<[ProgressEntry]>` directly (no VM)
 - `SessionCell` / `ExerciseRow` — Simple display components
 - `ErrorView` — Reusable error display with retry action
@@ -95,13 +100,16 @@ SwiftUI views that are pure functions of state. Views own `@Query` for raw Swift
 
 `@Observable @MainActor` classes that own all computed/derived state and interactor calls. Views hold VMs via `@State`.
 
-**Initialization pattern:** `@Environment` is not available at `@State` init time. VMs are initialized with `StubWorkoutsInteractor` as a placeholder and receive the real interactor via `configure(interactor:)` called from `.onAppear`.
+**Initialization pattern:** `@Environment` is not available at `@State` init time. VMs are initialized with `StubWorkoutsInteractor` as a placeholder and receive the real interactor via `configure(interactor:)` called from `.task`, which also triggers the initial data load.
 
 ```swift
 // All three VMs follow this pattern:
 @State private var vm = SessionListViewModel()
 
-.onAppear { vm.configure(interactor: injected.interactors.workouts) }
+.task {
+    vm.configure(interactor: injected.interactors.workouts)
+    await vm.loadSessions()
+}
 ```
 
 **Loadable in ViewModels:** The `$binding.load { }` helper requires a `Binding<Loadable<T>>` which is not available inside `@Observable` classes. VMs use an explicit `Task + Loadable` pattern instead:
@@ -121,15 +129,18 @@ func save() {
 
 | ViewModel | Owns | Exposes |
 |---|---|---|
-| `SessionListViewModel` | Interactor ref | `groupedSessions: [(key: Date, value: [WorkoutSession])]` |
-| `SessionDetailViewModel` | Interactor ref | `allExercises: [any AnalyticsTrackable]` |
-| `AddExerciseViewModel` | Interactor ref, `sessionID`, form fields | `filteredSuggestions`, `saveState: Loadable<UUID>` |
+| `SessionListViewModel` | `Loadable<[WorkoutSessionDTO]>`, Interactor ref | `sessions`, `groupedSessions`, `loadSessions()` |
+| `SessionDetailViewModel` | `Loadable<WorkoutSessionDTO>`, Interactor ref, `sessionID` | `session`, `allExercises`, `sessionDate`, `loadSession()` |
+| `AddExerciseViewModel` | Interactor ref, `sessionID`, form fields, `[ExerciseLibraryEntryDTO]?` | `filteredSuggestions`, `saveState: Loadable<UUID>`, `loadLibraryEntries()` |
 
 ### Business Logic Layer (`Interactors/`)
 
 **Protocol**: `WorkoutsInteractor`
 ```swift
 protocol WorkoutsInteractor {
+    func fetchSessions() async throws -> [WorkoutSessionDTO]
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO]
     func addExercise(to sessionID: UUID?, input: ExerciseInput) async throws -> UUID
     func deleteSession(id: UUID) async throws
     func deleteExercise(id: UUID, type: ExerciseType, from sessionID: UUID) async throws
@@ -151,6 +162,9 @@ Key principles:
 **Protocol**: `WorkoutsDBRepository`
 ```swift
 protocol WorkoutsDBRepository {
+    func fetchSessions() async throws -> [WorkoutSessionDTO]
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO]
     func addSession() async throws -> WorkoutSession
     func deleteSession(_ session: WorkoutSession) async throws
     func addStrengthExercise(_ input: ExerciseInput.Strength, to session: WorkoutSession) async throws
@@ -172,7 +186,7 @@ No web/network repositories — this app is fully local.
 
 ### AppState (`Core/AppState.swift`)
 
-Minimal Redux-like state — only routing, no data state (SwiftData + `@Query` handles data):
+Minimal Redux-like state — only routing, no data state (ViewModels own `Loadable<DTO>` state):
 
 ```swift
 struct AppState: Equatable {
@@ -246,7 +260,7 @@ static func bootstrap() async throws -> AppEnvironment
 
 ---
 
-## Data Models (`Repositories/Models/`)
+## Data Models (`Repositories/Models/` and `Models/DTOs/`)
 
 All persistence models use SwiftData `@Model`:
 
@@ -258,6 +272,15 @@ All persistence models use SwiftData `@Model`:
 | `ExerciseLibraryEntry` | Unique exercise name + type; auto-saved when user adds an exercise |
 | `ProgressEntry` | Non-persisted struct; captures historical analytics for charting |
 | `AppSchema` | Schema version definition (v1.0.0); lists all `@Model` classes |
+
+DTO structs in `Models/DTOs/` are plain structs with no SwiftData dependency. The repository layer maps `@Model` objects to DTOs via private `toDTO()` extensions before returning data to the interactor:
+
+| DTO | Description |
+|---|---|
+| `WorkoutSessionDTO` | Plain struct — session data for views (no SwiftData dependency) |
+| `StrengthExerciseDTO` | Plain struct — strength exercise for views; conforms to `AnalyticsTrackable` |
+| `CardioExerciseDTO` | Plain struct — cardio exercise for views; conforms to `AnalyticsTrackable` |
+| `ExerciseLibraryEntryDTO` | Plain struct — library entry for views |
 
 ### SwiftData Indexes
 
@@ -287,7 +310,7 @@ protocol AnalyticsTrackable: Exercise {
 }
 ```
 
-Both `StrengthExercise` and `CardioExercise` conform to `AnalyticsTrackable`, enabling polymorphic display in `SessionDetailView` via `vm.allExercises: [any AnalyticsTrackable]`.
+Both `StrengthExerciseDTO` and `CardioExerciseDTO` conform to `AnalyticsTrackable`, enabling polymorphic display in `SessionDetailView` via `vm.allExercises: [any AnalyticsTrackable]`.
 
 ### ExerciseType (`Utilities/ExerciseType.swift`)
 
@@ -328,7 +351,7 @@ enum ExerciseInput {
 3. VM builds `ExerciseInput`, sets `saveState = .isLoading`, fires a `Task`
 4. `RealWorkoutsInteractor.addExercise(to:input:)` called
 5. `MainDBRepository` inserts into `ModelContext`
-6. SwiftData notifies `@Query` in `SessionDetailView`; VM's `updateExercises` called via `onChange`
+6. VM re-fetches via interactor after mutation completes (`loadSession()` called)
 7. UI re-renders automatically via `@Observable`
 
 ### Viewing Progress
@@ -362,6 +385,12 @@ WorkoutsApp/
 │   └── AppEnvironment.swift         # Async bootstrap factory (throws on failure)
 ├── Interactors/
 │   └── WorkoutsInteractor.swift     # Protocol + Real + Stub implementations
+├── Models/
+│   └── DTOs/
+│       ├── WorkoutSessionDTO.swift      # Plain struct — session data for views
+│       ├── StrengthExerciseDTO.swift    # Plain struct — conforms to AnalyticsTrackable
+│       ├── CardioExerciseDTO.swift      # Plain struct — conforms to AnalyticsTrackable
+│       └── ExerciseLibraryEntryDTO.swift # Plain struct — library entry for views
 ├── Repositories/
 │   ├── Database/
 │   │   ├── WorkoutsDBRepository.swift  # Protocol + MainDBRepository (@ModelActor)
@@ -377,20 +406,19 @@ WorkoutsApp/
 │   ├── RootView.swift               # Launch state machine + error recovery
 │   ├── SessionList/
 │   │   ├── SessionListView.swift
-│   │   ├── SessionListViewModel.swift   # @Observable groupedSessions + delete
+│   │   ├── SessionListViewModel.swift   # @Observable Loadable<[WorkoutSessionDTO]> + groupedSessions
 │   │   └── SessionCell.swift
 │   ├── SessionDetail/
 │   │   ├── SessionDetailView.swift
-│   │   ├── SessionDetailViewModel.swift # @Observable allExercises + delete
+│   │   ├── SessionDetailViewModel.swift # @Observable Loadable<WorkoutSessionDTO> + allExercises
 │   │   └── ExerciseRow.swift
 │   ├── AddExercise/
 │   │   ├── AddExerciseView.swift
-│   │   └── AddExerciseViewModel.swift   # @Observable form state + save + suggestions
+│   │   └── AddExerciseViewModel.swift   # @Observable form state + save + suggestions + library DTOs
 │   ├── ExerciseProgress/
 │   │   └── ExerciseProgressView.swift   # No VM — already clean
 │   ├── Common/
-│   │   ├── ErrorView.swift
-│   │   └── Query+Search.swift           # .query() modifier for searchable @Query
+│   │   └── ErrorView.swift
 │   └── RootViewModifier.swift
 └── Utilities/
     ├── Store.swift                      # CurrentValueSubject alias + extensions
@@ -431,13 +459,13 @@ UnitTests/
 
 ### Unit Tests — ViewModels
 
-Plain `@Observable` classes tested without SwiftUI or SwiftData. Inject `MockedWorkoutsInteractor` directly via `vm.configure(interactor:)`.
+Plain `@Observable` classes tested without SwiftUI or SwiftData. Inject `MockedWorkoutsInteractor` directly via `vm.configure(interactor:)`. VMs load data by calling interactor fetch methods, so tests configure the mock to return pre-built DTO fixtures.
 
 ```swift
 @Test func groupsSessionsByDay() async throws {
     let vm = SessionListViewModel()
     vm.configure(interactor: MockedWorkoutsInteractor())
-    vm.sessionsDidChange([session1, session2])
+    await vm.loadSessions()
     #expect(vm.groupedSessions.count == 2)
 }
 ```
@@ -477,8 +505,10 @@ Views are tested with `ViewInspector` for async UI state transitions. The `Inspe
 // In View:
 @State private var vm = SessionListViewModel()
 
-.onAppear { vm.configure(interactor: injected.interactors.workouts) }
-.onChange(of: sessions, initial: true) { vm.sessionsDidChange(sessions) }
+.task {
+    vm.configure(interactor: injected.interactors.workouts)
+    await vm.loadSessions()
+}
 
 // In body — reads cached/computed state, no recomputation:
 ForEach(vm.groupedSessions, id: \.key) { ... }
@@ -526,16 +556,6 @@ private var routingBinding: Binding<SessionList.Routing> {
 }
 ```
 
-### @Query with Search
-
-```swift
-.query(searchText: searchText, results: $sessions) { search in
-    Query(filter: #Predicate<WorkoutSession> { session in
-        search.isEmpty || session.name.localizedStandardContains(search)
-    }, sort: \WorkoutSession.date, order: .reverse)
-}
-```
-
 ---
 
 ## Building the Project
@@ -580,15 +600,13 @@ xcodebuild test -scheme WorkoutsApp \
 
 ## Design Decisions
 
-### Why ViewModels alongside @Query?
+### Why DTOs instead of @Model in views?
 
-`@Query` results in SwiftUI views change on every SwiftData write, triggering a view body re-evaluation. Operations like grouping sessions by day or merging two exercise arrays were computed inline in the view body — meaning they ran on every render, not just when their inputs changed.
+Views and ViewModels reference only plain DTO structs. The repository layer maps `@Model` objects to DTOs internally via private `toDTO()` extensions before returning data up the stack. This means:
 
-`@Observable` ViewModels break this coupling: the view passes raw `@Query` results into the VM via `onChange`, and the VM recomputes only when its input actually changes. The view body then reads a cached stored property — no recomputation on unrelated renders.
-
-### Why not put @Query inside the ViewModel?
-
-`@Query` is a SwiftUI property wrapper — it requires a View context and cannot be used inside an `@Observable` class. The view must own `@Query` and forward results to the VM. This is the correct boundary: SwiftData observation lives in the view layer, derived state lives in the VM.
+- Views have zero SwiftData dependency — they can be tested without `ModelContainer`
+- The data source can be swapped (e.g., to a network API) without touching the UI layer
+- VMs own `Loadable<DTO>` state and explicitly re-fetch after mutations, making data flow predictable and explicit
 
 ### Why async bootstrap?
 
@@ -611,7 +629,7 @@ A silent fallback to an in-memory `ModelContainer` means the app appears to work
 ## Questions to Ask When Modifying
 
 - [ ] Which layer does this belong to? (View / ViewModel / Interactor / Repository)
-- [ ] Should this be a repository operation or can the view use `@Query` directly?
+- [ ] Should this be a repository operation? Does it need a DTO mapping?
 - [ ] Is there derived/computed state that should live in the ViewModel instead of the view body?
 - [ ] Does this need `Loadable` for async UI feedback?
 - [ ] Am I in a View (`$binding.load {}`) or a ViewModel (manual `Task + Loadable`)?
