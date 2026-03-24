@@ -25,7 +25,7 @@ struct SessionListView: View {
                     }
                 }
                 .navigationDestination(for: SessionDetailDestination.self) { dest in
-                    SessionDetailView(sessionDTO: dest.session, navigationPath: $navigationPath)
+                    SessionDetailView(sessionID: dest.sessionID, navigationPath: $navigationPath)
                 }
                 .navigationDestination(for: AddExerciseDestination.self) { dest in
                     AddExerciseView(sessionID: dest.sessionID)
@@ -66,7 +66,7 @@ struct SessionListView: View {
             ForEach(vm.groupedSessions, id: \.key) { date, group in
                 Section(header: Text(date, style: .date)) {
                     ForEach(group) { session in
-                        NavigationLink(value: SessionDetailDestination(session: session)) {
+                        NavigationLink(value: SessionDetailDestination(sessionID: session.id)) {
                             SessionCell(session: session)
                         }
                     }
@@ -99,7 +99,7 @@ typealias SessionList = SessionListView
 // MARK: - Navigation Destinations
 
 struct SessionDetailDestination: Hashable {
-    let session: WorkoutSessionDTO
+    let sessionID: UUID
 }
 
 struct AddExerciseDestination: Hashable {

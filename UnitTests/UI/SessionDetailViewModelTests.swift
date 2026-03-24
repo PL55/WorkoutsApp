@@ -6,23 +6,21 @@ import Foundation
 @MainActor
 @Suite struct SessionDetailViewModelTests {
 
-    let session: WorkoutSession
-    let strength: StrengthExercise
-    let cardio: CardioExercise
+    let sessionID: UUID
+    let strength: StrengthExerciseDTO
+    let cardio: CardioExerciseDTO
 
     init() {
-        session = WorkoutSession(id: UUID(), date: .now)
-        // Do NOT set @Relationship properties (strengthExercises/cardioExercises) on the
-        // session outside a ModelContext — SwiftData relationships require a backing store.
-        // The VM receives plain arrays via updateExercises(strength:cardio:), so we only
-        // need the model objects themselves, not wired into the session graph.
-        strength = StrengthExercise(id: UUID(), name: "Squat", sets: 3, reps: 5, weight: 100)
-        cardio = CardioExercise(id: UUID(), name: "Run", durationMinutes: 30)
+        sessionID = UUID()
+        strength = StrengthExerciseDTO(id: UUID(), name: "Squat", sets: 3, reps: 5, weight: 100)
+        cardio = CardioExerciseDTO(id: UUID(), name: "Run", durationMinutes: 30)
     }
 
     @Test func combinesStrengthAndCardio() {
-        let vm = SessionDetailViewModel()
-        vm.updateExercises(strength: [strength], cardio: [cardio])
+        let vm = SessionDetailViewModel(sessionID: sessionID)
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+                                     strengthExercises: [strength], cardioExercises: [cardio])
+        vm.sessionDidChange(dto)
         #expect(vm.allExercises.count == 2)
         let names = vm.allExercises.map(\.name)
         #expect(names.contains("Squat"))
@@ -30,25 +28,58 @@ import Foundation
     }
 
     @Test func strengthExercisesAppearFirst() {
-        let vm = SessionDetailViewModel()
-        vm.updateExercises(strength: [strength], cardio: [cardio])
+        let vm = SessionDetailViewModel(sessionID: sessionID)
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+                                     strengthExercises: [strength], cardioExercises: [cardio])
+        vm.sessionDidChange(dto)
         #expect(vm.allExercises[0].name == "Squat")
         #expect(vm.allExercises[1].name == "Run")
     }
 
     @Test func emptyWhenNoExercises() {
-        let vm = SessionDetailViewModel()
-        vm.updateExercises(strength: [], cardio: [])
+        let vm = SessionDetailViewModel(sessionID: sessionID)
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+                                     strengthExercises: [], cardioExercises: [])
+        vm.sessionDidChange(dto)
         #expect(vm.allExercises.isEmpty)
     }
 
-    @Test func deleteExerciseCallsInteractor() async throws {
+    @Test func deleteExerciseCallsInteractorAndReloads() async throws {
         let mocked = MockedWorkoutsInteractor(expected: [
-            .deleteExercise(id: strength.id, type: .strength, sessionID: session.id)
+            .deleteExercise(id: strength.id, type: .strength, sessionID: sessionID),
+            .fetchSession(id: sessionID)
         ])
-        let vm = SessionDetailViewModel()
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+                                     strengthExercises: [], cardioExercises: [])
+        mocked.fetchSessionResult = .success(dto)
+        let vm = SessionDetailViewModel(sessionID: sessionID)
         vm.configure(interactor: mocked)
-        try await vm.deleteExercise(id: strength.id, type: .strength, from: session.id)
+        try await vm.deleteExercise(id: strength.id, type: .strength)
+        // Wait for loadSession() Task to complete
+        for _ in 0..<100 where vm.session.isLoading {
+            await Task.yield()
+        }
+        mocked.verify()
+    }
+
+    @Test func loadSessionTransitionsToLoaded() async throws {
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+                                     strengthExercises: [strength], cardioExercises: [])
+        let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
+        mocked.fetchSessionResult = .success(dto)
+        let vm = SessionDetailViewModel(sessionID: sessionID)
+        vm.configure(interactor: mocked)
+        vm.loadSession()
+
+        for _ in 0..<100 where vm.session.isLoading {
+            await Task.yield()
+        }
+
+        if case .loaded(let session) = vm.session {
+            #expect(session.strengthExercises.count == 1)
+        } else {
+            Issue.record("Expected .loaded, got \(vm.session)")
+        }
         mocked.verify()
     }
 }
