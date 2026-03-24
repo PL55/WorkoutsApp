@@ -1,7 +1,6 @@
 // UnitTests/UI/AddExerciseViewTests.swift
 import Testing
 import ViewInspector
-import SwiftData
 import SwiftUI
 @testable import WorkoutsApp
 
@@ -9,10 +8,11 @@ import SwiftUI
 @Suite struct AddExerciseViewTests {
 
     @Test func showsStrengthFieldsByDefault() async throws {
-        let container = DIContainer(interactors: .mocked())
+        let mocked = MockedWorkoutsInteractor(expected: [.fetchLibraryEntries])
+        mocked.fetchLibraryEntriesResult = .success([])
+        let container = DIContainer(interactors: .init(workouts: mocked))
         let sut = AddExerciseView(sessionID: nil)
-        let modelContainer = ModelContainer.mock
-        let view = sut.inject(container).modelContainer(modelContainer)
+        let view = sut.inject(container)
         try await ViewHosting.host(view) {
             try await sut.inspection.inspect { view in
                 #expect(container.appState.value == AppState())
@@ -25,8 +25,7 @@ import SwiftUI
         let vm = AddExerciseViewModel(sessionID: nil)
         vm.saveState = .isLoading(last: nil, cancelBag: .test)
         let sut = AddExerciseView(sessionID: nil, viewModel: vm)
-        let modelContainer = ModelContainer.mock
-        let view = sut.inject(container).modelContainer(modelContainer)
+        let view = sut.inject(container)
         try await ViewHosting.host(view) {
             try await sut.inspection.inspect { view in
                 #expect(container.appState.value == AppState())
@@ -39,8 +38,7 @@ import SwiftUI
         let vm = AddExerciseViewModel(sessionID: nil)
         vm.saveState = .failed(NSError.test)
         let sut = AddExerciseView(sessionID: nil, viewModel: vm)
-        let modelContainer = ModelContainer.mock
-        let view = sut.inject(container).modelContainer(modelContainer)
+        let view = sut.inject(container)
         try await ViewHosting.host(view) {
             try await sut.inspection.inspect { view in
                 #expect(container.appState.value == AppState())

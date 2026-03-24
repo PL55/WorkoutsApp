@@ -1,7 +1,6 @@
 // UnitTests/UI/AddExerciseViewModelTests.swift
 import Testing
 import Foundation
-import SwiftData
 @testable import WorkoutsApp
 
 @MainActor
@@ -9,9 +8,9 @@ import SwiftData
 
     @Test func filtersSuggestionsByTypeAndName() {
         let vm = AddExerciseViewModel(sessionID: nil)
-        let squat = ExerciseLibraryEntry(name: "Squat", type: .strength)
-        let bench = ExerciseLibraryEntry(name: "Bench Press", type: .strength)
-        let run   = ExerciseLibraryEntry(name: "Run", type: .cardio)
+        let squat = ExerciseLibraryEntryDTO(id: UUID(), name: "Squat", type: .strength)
+        let bench = ExerciseLibraryEntryDTO(id: UUID(), name: "Bench Press", type: .strength)
+        let run   = ExerciseLibraryEntryDTO(id: UUID(), name: "Run", type: .cardio)
 
         vm.exerciseType = .strength
         vm.name = "sq"
@@ -23,10 +22,10 @@ import SwiftData
 
     @Test func excludesExactNameMatchFromSuggestions() {
         let vm = AddExerciseViewModel(sessionID: nil)
-        let squat = ExerciseLibraryEntry(name: "Squat", type: .strength)
+        let squat = ExerciseLibraryEntryDTO(id: UUID(), name: "Squat", type: .strength)
 
         vm.exerciseType = .strength
-        vm.name = "Squat"   // exact match → excluded
+        vm.name = "Squat"
         vm.updateSuggestions(from: [squat])
 
         #expect(vm.filteredSuggestions.isEmpty)
@@ -34,17 +33,31 @@ import SwiftData
 
     @Test func filtersToSelectedTypeOnly() {
         let vm = AddExerciseViewModel(sessionID: nil)
-        let squat = ExerciseLibraryEntry(name: "Squat", type: .strength)
-        let run   = ExerciseLibraryEntry(name: "Run", type: .cardio)
+        let squat = ExerciseLibraryEntryDTO(id: UUID(), name: "Squat", type: .strength)
+        let run   = ExerciseLibraryEntryDTO(id: UUID(), name: "Run", type: .cardio)
 
         vm.exerciseType = .cardio
-        // Use a non-empty name that matches only "Run". Using "" causes ExerciseLibraryEntry
-        // @Model properties to be unreliable in parallel test runs without a ModelContext.
         vm.name = "r"
         vm.updateSuggestions(from: [squat, run])
 
         #expect(vm.filteredSuggestions.count == 1)
         #expect(vm.filteredSuggestions.first?.name == "Run")
+    }
+
+    @Test func loadLibraryEntriesPopulatesEntries() async throws {
+        let entry = ExerciseLibraryEntryDTO(id: UUID(), name: "Squat", type: .strength)
+        let mocked = MockedWorkoutsInteractor(expected: [.fetchLibraryEntries])
+        mocked.fetchLibraryEntriesResult = .success([entry])
+        let vm = AddExerciseViewModel(sessionID: nil)
+        vm.configure(interactor: mocked)
+        vm.loadLibraryEntries()
+
+        for _ in 0..<100 where vm.libraryEntries == nil {
+            await Task.yield()
+        }
+
+        #expect(vm.libraryEntries?.count == 1)
+        mocked.verify()
     }
 
     @Test func saveCallsInteractorAndTransitionsToLoaded() async throws {
@@ -65,8 +78,6 @@ import SwiftData
 
         vm.save()
 
-        // `save()` sets .isLoading synchronously, then a Task updates saveState.
-        // Yield in a bounded loop so that inner Task gets main-actor time to complete.
         for _ in 0..<100 where vm.saveState.isLoading {
             await Task.yield()
         }
@@ -93,8 +104,6 @@ import SwiftData
 
         vm.save()
 
-        // `save()` sets .isLoading synchronously, then a Task updates saveState.
-        // Yield in a bounded loop so that inner Task gets main-actor time to complete.
         for _ in 0..<100 where vm.saveState.isLoading {
             await Task.yield()
         }

@@ -1,13 +1,9 @@
 // WorkoutsApp/UI/AddExercise/AddExerciseView.swift
 import SwiftUI
-import SwiftData
 
 struct AddExerciseView: View {
 
     @State private var vm: AddExerciseViewModel
-
-    @Query(sort: \ExerciseLibraryEntry.name)
-    private var libraryEntries: [ExerciseLibraryEntry]
 
     @Environment(\.injected) private var injected: DIContainer
     @Environment(\.dismiss) private var dismiss
@@ -19,7 +15,7 @@ struct AddExerciseView: View {
         _vm = State(initialValue: AddExerciseViewModel(sessionID: sessionID))
     }
 
-    /// Testing init — allows injecting a pre-configured VM (e.g. with a preset saveState).
+    /// Testing init — allows injecting a pre-configured VM.
     init(sessionID: UUID?, viewModel: AddExerciseViewModel) {
         _vm = State(initialValue: viewModel)
     }
@@ -40,14 +36,19 @@ struct AddExerciseView: View {
             .onChange(of: vm.saveState) { _, new in
                 if case .loaded = new { dismiss() }
             }
-            .onChange(of: vm.name, initial: true) { _, _ in
-                vm.updateSuggestions(from: libraryEntries)
+            .onChange(of: vm.name) { _, _ in
+                if let entries = vm.libraryEntries {
+                    vm.updateSuggestions(from: entries)
+                }
             }
             .onChange(of: vm.exerciseType) { _, _ in
-                vm.updateSuggestions(from: libraryEntries)
+                if let entries = vm.libraryEntries {
+                    vm.updateSuggestions(from: entries)
+                }
             }
             .task {
                 vm.configure(interactor: injected.interactors.workouts)
+                vm.loadLibraryEntries()
             }
             .onReceive(inspection.notice) { self.inspection.visit(self, $0) }
     }
@@ -112,6 +113,3 @@ struct AddExerciseView: View {
         }
     }
 }
-
-// MARK: - Helpers
-// Loadable.isLoading is declared as an internal extension in Loadable.swift (added in Task 2).
