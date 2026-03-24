@@ -106,6 +106,51 @@ final class ProgressEntriesTests: WorkoutsInteractorTests {
     }
 }
 
+// MARK: - fetchSessions
+
+final class FetchSessionsTests: WorkoutsInteractorTests {
+
+    @Test func forwardsSessionsFromRepository() async throws {
+        let dto = WorkoutSessionDTO(id: UUID(), date: .now, strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchSessions])
+        mockedDB.fetchSessionsResult = .success([dto])
+        let result = try await sut.fetchSessions()
+        #expect(result.count == 1)
+        #expect(result[0].id == dto.id)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchSession
+
+final class FetchSessionTests: WorkoutsInteractorTests {
+
+    @Test func forwardsSingleSessionFromRepository() async throws {
+        let sessionID = UUID()
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchSession(id: sessionID)])
+        mockedDB.fetchSessionResult = .success(dto)
+        let result = try await sut.fetchSession(id: sessionID)
+        #expect(result.id == sessionID)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchLibraryEntries
+
+final class FetchLibraryEntriesTests: WorkoutsInteractorTests {
+
+    @Test func forwardsLibraryEntriesFromRepository() async throws {
+        let entry = ExerciseLibraryEntryDTO(id: UUID(), name: "Squat", type: .strength)
+        mockedDB.actions = .init(expected: [.fetchLibraryEntries])
+        mockedDB.fetchLibraryEntriesResult = .success([entry])
+        let result = try await sut.fetchLibraryEntries()
+        #expect(result.count == 1)
+        #expect(result[0].name == "Squat")
+        mockedDB.verify()
+    }
+}
+
 // MARK: - StubWorkoutsInteractor
 
 final class StubWorkoutsInteractorTests: WorkoutsInteractorTests {
@@ -117,5 +162,11 @@ final class StubWorkoutsInteractorTests: WorkoutsInteractorTests {
         try await stub.deleteExercise(id: UUID(), type: .strength, from: UUID())
         let entries = try await stub.progressEntries(for: "anything")
         #expect(entries.isEmpty)
+        let sessions = try await stub.fetchSessions()
+        #expect(sessions.isEmpty)
+        let session = try await stub.fetchSession(id: UUID())
+        #expect(session.strengthExercises.isEmpty)
+        let libraryEntries = try await stub.fetchLibraryEntries()
+        #expect(libraryEntries.isEmpty)
     }
 }

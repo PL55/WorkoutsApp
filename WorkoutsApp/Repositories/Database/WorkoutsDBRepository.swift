@@ -12,6 +12,10 @@ protocol WorkoutsDBRepository {
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry]
     func libraryContains(name: String) async throws -> Bool
     func upsertLibraryEntry(name: String, type: ExerciseType) async throws
+    // New read methods — return DTOs, no SwiftData types leak out
+    func fetchSessions() async throws -> [WorkoutSessionDTO]
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO]
 }
 
 // MARK: - MainDBRepository conformance
@@ -87,6 +91,28 @@ extension MainDBRepository: WorkoutsDBRepository {
         try modelContext.save()
     }
 
+    func fetchSessions() async throws -> [WorkoutSessionDTO] {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        return try modelContext.fetch(descriptor).map { $0.toDTO() }
+    }
+
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
+        let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.id == id })
+        guard let session = try modelContext.fetch(descriptor).first else {
+            throw SessionNotFoundError()
+        }
+        return session.toDTO()
+    }
+
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
+        let descriptor = FetchDescriptor<ExerciseLibraryEntry>(
+            sortBy: [SortDescriptor(\.name)]
+        )
+        return try modelContext.fetch(descriptor).map { $0.toDTO() }
+    }
+
     // MARK: - Private helpers
 
     private func insertExercise(_ input: ExerciseInput, into session: WorkoutSession) throws {
@@ -102,5 +128,36 @@ extension MainDBRepository: WorkoutsDBRepository {
             session.cardioExercises.append(e)
             modelContext.insert(e)
         }
+    }
+}
+
+// MARK: - DTO Mapping
+
+private extension WorkoutSession {
+    func toDTO() -> WorkoutSessionDTO {
+        WorkoutSessionDTO(
+            id: id,
+            date: date,
+            strengthExercises: strengthExercises.map { $0.toDTO() },
+            cardioExercises: cardioExercises.map { $0.toDTO() }
+        )
+    }
+}
+
+private extension StrengthExercise {
+    func toDTO() -> StrengthExerciseDTO {
+        StrengthExerciseDTO(id: id, name: name, sets: sets, reps: reps, weight: weight)
+    }
+}
+
+private extension CardioExercise {
+    func toDTO() -> CardioExerciseDTO {
+        CardioExerciseDTO(id: id, name: name, durationMinutes: durationMinutes)
+    }
+}
+
+private extension ExerciseLibraryEntry {
+    func toDTO() -> ExerciseLibraryEntryDTO {
+        ExerciseLibraryEntryDTO(id: id, name: name, type: type)
     }
 }

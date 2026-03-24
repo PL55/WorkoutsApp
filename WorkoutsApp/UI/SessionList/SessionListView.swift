@@ -1,12 +1,8 @@
 // WorkoutsApp/UI/SessionList/SessionListView.swift
 import SwiftUI
-import SwiftData
 import Combine
 
 struct SessionListView: View {
-
-    @Query(sort: \WorkoutSession.date, order: .reverse)
-    private var sessions: [WorkoutSession]
 
     @State private var vm = SessionListViewModel()
     @State private var navigationPath = NavigationPath()
@@ -17,44 +13,52 @@ struct SessionListView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            Group {
-                if sessions.isEmpty {
-                    ContentUnavailableView(
-                        "No Workouts Yet",
-                        systemImage: "dumbbell",
-                        description: Text("Tap + to log your first workout")
-                    )
-                } else {
-                    sessionList
-                }
-            }
-            .navigationTitle("Workouts")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        navigationPath.append(AddExerciseDestination(sessionID: nil))
-                    } label: {
-                        Image(systemName: "plus")
+            content
+                .navigationTitle("Workouts")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            navigationPath.append(AddExerciseDestination(sessionID: nil))
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
-            }
-            .navigationDestination(for: WorkoutSession.self) { session in
-                SessionDetailView(session: session, navigationPath: $navigationPath)
-            }
-            .navigationDestination(for: AddExerciseDestination.self) { dest in
-                AddExerciseView(sessionID: dest.sessionID)
-            }
-            .navigationDestination(for: ExerciseProgressDestination.self) { dest in
-                ExerciseProgressView(exerciseName: dest.exerciseName)
-            }
+                .navigationDestination(for: SessionDetailDestination.self) { dest in
+                    SessionDetailView(sessionID: dest.sessionID, navigationPath: $navigationPath)
+                }
+                .navigationDestination(for: AddExerciseDestination.self) { dest in
+                    AddExerciseView(sessionID: dest.sessionID)
+                }
+                .navigationDestination(for: ExerciseProgressDestination.self) { dest in
+                    ExerciseProgressView(exerciseName: dest.exerciseName)
+                }
         }
         .task {
             vm.configure(interactor: injected.interactors.workouts)
-        }
-        .onChange(of: sessions, initial: true) { _, new in
-            vm.sessionsDidChange(new)
+            vm.loadSessions()
         }
         .onReceive(inspection.notice) { self.inspection.visit(self, $0) }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch vm.sessions {
+        case .notRequested, .isLoading:
+            ProgressView()
+        case .loaded(let sessions):
+            if sessions.isEmpty {
+                ContentUnavailableView(
+                    "No Workouts Yet",
+                    systemImage: "dumbbell",
+                    description: Text("Tap + to log your first workout")
+                )
+            } else {
+                sessionList
+            }
+        case .failed(let error):
+            ErrorView(error: error, retryAction: { vm.loadSessions() })
+        }
     }
 
     private var sessionList: some View {
@@ -62,7 +66,7 @@ struct SessionListView: View {
             ForEach(vm.groupedSessions, id: \.key) { date, group in
                 Section(header: Text(date, style: .date)) {
                     ForEach(group) { session in
-                        NavigationLink(value: session) {
+                        NavigationLink(value: SessionDetailDestination(sessionID: session.id)) {
                             SessionCell(session: session)
                         }
                     }
@@ -74,7 +78,7 @@ struct SessionListView: View {
         }
     }
 
-    private func deleteSession(group: [WorkoutSession], offsets: IndexSet) {
+    private func deleteSession(group: [WorkoutSessionDTO], offsets: IndexSet) {
         for index in offsets {
             let session = group[index]
             Task {
@@ -93,6 +97,10 @@ extension SessionList {
 typealias SessionList = SessionListView
 
 // MARK: - Navigation Destinations
+
+struct SessionDetailDestination: Hashable {
+    let sessionID: UUID
+}
 
 struct AddExerciseDestination: Hashable {
     let sessionID: UUID?
