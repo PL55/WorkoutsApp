@@ -13,6 +13,7 @@ protocol WorkoutsInteractor {
     func fetchSessions() async throws -> [WorkoutSessionDTO]
     func fetchSession(id: UUID) async throws -> WorkoutSessionDTO
     func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO]
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO]
 }
 
 // MARK: - Real implementation
@@ -58,6 +59,10 @@ struct RealWorkoutsInteractor: WorkoutsInteractor {
     func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
         try await dbRepository.fetchLibraryEntries()
     }
+
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] {
+        try await dbRepository.fetchExerciseOverviews(type: type)
+    }
 }
 
 // MARK: - Stub (for UI tests and previews)
@@ -74,4 +79,5 @@ struct StubWorkoutsInteractor: WorkoutsInteractor {
         WorkoutSessionDTO(id: id, date: .now, strengthExercises: [], cardioExercises: [])
     }
     func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] { [] }
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] { [] }
 }

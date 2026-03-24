@@ -30,6 +30,7 @@ final class MockedWorkoutsInteractor: Mock, WorkoutsInteractor {
         case fetchSessions
         case fetchSession(id: UUID)
         case fetchLibraryEntries
+        case fetchExerciseOverviews(type: ExerciseType)
     }
 
     var actions: MockActions<Action>
@@ -38,6 +39,7 @@ final class MockedWorkoutsInteractor: Mock, WorkoutsInteractor {
     var fetchSessionsResult: Result<[WorkoutSessionDTO], Error> = .success([])
     var fetchSessionResult: Result<WorkoutSessionDTO, Error> = .failure(SessionNotFoundError())
     var fetchLibraryEntriesResult: Result<[ExerciseLibraryEntryDTO], Error> = .success([])
+    var fetchExerciseOverviewsResult: Result<[ExerciseOverviewDTO], Error> = .success([])
 
     init(expected: [Action]) {
         self.actions = .init(expected: expected)
@@ -74,5 +76,10 @@ final class MockedWorkoutsInteractor: Mock, WorkoutsInteractor {
     func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
         register(.fetchLibraryEntries)
         return try fetchLibraryEntriesResult.get()
+    }
+
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] {
+        register(.fetchExerciseOverviews(type: type))
+        return try fetchExerciseOverviewsResult.get()
     }
 }

@@ -149,4 +149,51 @@ import Foundation
         #expect(names.contains("Squat"))
         #expect(names.contains("Run"))
     }
+
+    // MARK: - fetchExerciseOverviews
+
+    @Test func fetchExerciseOverviews_computesBestAndLatest() async throws {
+        let older = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+        _ = try await sut.saveNewSession(date: older, with: .strength(name: "Bench", sets: 3, reps: 8, weight: 60))
+        _ = try await sut.saveNewSession(date: .now,   with: .strength(name: "Bench", sets: 4, reps: 6, weight: 80))
+        let overviews = try await sut.fetchExerciseOverviews(type: .strength)
+        #expect(overviews.count == 1)
+        let bench = try #require(overviews.first)
+        #expect(bench.name == "Bench")
+        // best = max(3*8*60, 4*6*80) = max(1440, 1920) = 1920
+        #expect(bench.bestValue == 1920)
+        // latest = value from the most recent session = 4*6*80 = 1920
+        #expect(bench.latestValue == 1920)
+        #expect(bench.lastDate > older)
+    }
+
+    @Test func fetchExerciseOverviews_separatesByType() async throws {
+        _ = try await sut.saveNewSession(date: .now, with: .strength(name: "Press", sets: 3, reps: 10, weight: 50))
+        _ = try await sut.saveNewSession(date: .now, with: .cardio(name: "Run", durationMinutes: 30))
+        let strength = try await sut.fetchExerciseOverviews(type: .strength)
+        let cardio   = try await sut.fetchExerciseOverviews(type: .cardio)
+        #expect(strength.count == 1)
+        #expect(strength[0].name == "Press")
+        #expect(cardio.count == 1)
+        #expect(cardio[0].name == "Run")
+    }
+
+    @Test func fetchExerciseOverviews_excludesOrphans() async throws {
+        let orphan = StrengthExercise(name: "Ghost", sets: 1, reps: 1, weight: 1)
+        container.mainContext.insert(orphan)
+        try container.mainContext.save()
+        let overviews = try await sut.fetchExerciseOverviews(type: .strength)
+        #expect(overviews.isEmpty)
+    }
+
+    @Test func progressEntries_deduplicatesBySessionKeepingHighest() async throws {
+        let sessionID = try await sut.saveNewSession(date: .now, with: .strength(name: "Bench", sets: 3, reps: 8, weight: 60))
+        // Add a second Bench row to the same session (higher volume)
+        try await sut.addExercise(.strength(name: "Bench", sets: 5, reps: 5, weight: 100), to: sessionID)
+        let entries = try await sut.progressEntries(for: "Bench")
+        // Despite two exercise rows, one session → one entry
+        #expect(entries.count == 1)
+        // Keep the highest: 5*5*100 = 2500 > 3*8*60 = 1440
+        #expect(entries[0].value == 2500)
+    }
 }
