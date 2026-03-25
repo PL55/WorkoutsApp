@@ -56,7 +56,10 @@ struct SessionDetailView: View {
     private var exerciseList: some View {
         List {
             ForEach(vm.allExercises, id: \.id) { exercise in
-                NavigationLink(value: ExerciseProgressDestination(exerciseName: exercise.name)) {
+                NavigationLink(value: ExerciseHistoryDestination(
+                    exerciseName: exercise.name,
+                    exerciseType: exercise.exerciseType
+                )) {
                     ExerciseRow(exercise: exercise)
                 }
             }
