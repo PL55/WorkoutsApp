@@ -10,6 +10,10 @@ protocol WorkoutsInteractor {
     func deleteSession(id: UUID) async throws
     func deleteExercise(id: UUID, type: ExerciseType, from sessionID: UUID) async throws
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry]
+    func fetchSessions() async throws -> [WorkoutSessionDTO]
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO]
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO]
 }
 
 // MARK: - Real implementation
@@ -43,6 +47,22 @@ struct RealWorkoutsInteractor: WorkoutsInteractor {
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry] {
         try await dbRepository.progressEntries(for: exerciseName)
     }
+
+    func fetchSessions() async throws -> [WorkoutSessionDTO] {
+        try await dbRepository.fetchSessions()
+    }
+
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
+        try await dbRepository.fetchSession(id: id)
+    }
+
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
+        try await dbRepository.fetchLibraryEntries()
+    }
+
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] {
+        try await dbRepository.fetchExerciseOverviews(type: type)
+    }
 }
 
 // MARK: - Stub (for UI tests and previews)
@@ -54,4 +74,10 @@ struct StubWorkoutsInteractor: WorkoutsInteractor {
     func deleteSession(id: UUID) async throws {}
     func deleteExercise(id: UUID, type: ExerciseType, from sessionID: UUID) async throws {}
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry] { [] }
+    func fetchSessions() async throws -> [WorkoutSessionDTO] { [] }
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
+        WorkoutSessionDTO(id: id, date: .now, strengthExercises: [], cardioExercises: [])
+    }
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] { [] }
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] { [] }
 }

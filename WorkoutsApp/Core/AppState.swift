@@ -8,7 +8,7 @@ struct AppState: Equatable {
 
 extension AppState {
     struct ViewRouting: Equatable {
-        var sessionList = SessionList.Routing()
+        var exerciseList = ExerciseList.Routing()
     }
 }
 

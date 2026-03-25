@@ -1,6 +1,5 @@
 // WorkoutsApp/DependencyInjection/DIContainer.swift
 import SwiftUI
-import SwiftData
 
 struct DIContainer {
 

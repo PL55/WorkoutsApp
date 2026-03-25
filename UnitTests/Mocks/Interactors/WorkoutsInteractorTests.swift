@@ -97,11 +97,80 @@ final class DeleteExerciseTests: WorkoutsInteractorTests {
 final class ProgressEntriesTests: WorkoutsInteractorTests {
 
     @Test func forwardsEntriesToCaller() async throws {
-        let entry = ProgressEntry(id: UUID(), date: .now, exerciseType: .strength, value: 1000, label: "Volume (lbs)")
+        let entry = ProgressEntry(id: UUID(), sessionID: UUID(), date: .now, exerciseType: .strength, value: 1000, label: "Volume (lbs)")
         mockedDB.actions = .init(expected: [.progressEntries(exerciseName: "Squat")])
         mockedDB.progressEntriesResult = .success([entry])
         let result = try await sut.progressEntries(for: "Squat")
         #expect(result == [entry])
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchSessions
+
+final class FetchSessionsTests: WorkoutsInteractorTests {
+
+    @Test func forwardsSessionsFromRepository() async throws {
+        let dto = WorkoutSessionDTO(id: UUID(), date: .now, strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchSessions])
+        mockedDB.fetchSessionsResult = .success([dto])
+        let result = try await sut.fetchSessions()
+        #expect(result.count == 1)
+        #expect(result[0].id == dto.id)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchSession
+
+final class FetchSessionTests: WorkoutsInteractorTests {
+
+    @Test func forwardsSingleSessionFromRepository() async throws {
+        let sessionID = UUID()
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchSession(id: sessionID)])
+        mockedDB.fetchSessionResult = .success(dto)
+        let result = try await sut.fetchSession(id: sessionID)
+        #expect(result.id == sessionID)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchLibraryEntries
+
+final class FetchLibraryEntriesTests: WorkoutsInteractorTests {
+
+    @Test func forwardsLibraryEntriesFromRepository() async throws {
+        let entry = ExerciseLibraryEntryDTO(id: UUID(), name: "Squat", type: .strength)
+        mockedDB.actions = .init(expected: [.fetchLibraryEntries])
+        mockedDB.fetchLibraryEntriesResult = .success([entry])
+        let result = try await sut.fetchLibraryEntries()
+        #expect(result.count == 1)
+        #expect(result[0].name == "Squat")
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchExerciseOverviews
+
+final class FetchExerciseOverviewsTests: WorkoutsInteractorTests {
+
+    @Test func forwardsStrengthOverviewsFromRepository() async throws {
+        let overview = ExerciseOverviewDTO(id: "Bench Press", name: "Bench Press", exerciseType: .strength,
+                                           bestValue: 1000, latestValue: 800, lastDate: .now, analyticsLabel: "Volume (lbs)")
+        mockedDB.actions = .init(expected: [.fetchExerciseOverviews(type: .strength)])
+        mockedDB.fetchExerciseOverviewsResult = .success([overview])
+        let result = try await sut.fetchExerciseOverviews(type: .strength)
+        #expect(result.count == 1)
+        #expect(result[0].name == "Bench Press")
+        mockedDB.verify()
+    }
+
+    @Test func forwardsCardioOverviewsFromRepository() async throws {
+        mockedDB.actions = .init(expected: [.fetchExerciseOverviews(type: .cardio)])
+        mockedDB.fetchExerciseOverviewsResult = .success([])
+        let result = try await sut.fetchExerciseOverviews(type: .cardio)
+        #expect(result.isEmpty)
         mockedDB.verify()
     }
 }
@@ -117,5 +186,13 @@ final class StubWorkoutsInteractorTests: WorkoutsInteractorTests {
         try await stub.deleteExercise(id: UUID(), type: .strength, from: UUID())
         let entries = try await stub.progressEntries(for: "anything")
         #expect(entries.isEmpty)
+        let sessions = try await stub.fetchSessions()
+        #expect(sessions.isEmpty)
+        let session = try await stub.fetchSession(id: UUID())
+        #expect(session.strengthExercises.isEmpty)
+        let libraryEntries = try await stub.fetchLibraryEntries()
+        #expect(libraryEntries.isEmpty)
+        let overviews = try await stub.fetchExerciseOverviews(type: .strength)
+        #expect(overviews.isEmpty)
     }
 }

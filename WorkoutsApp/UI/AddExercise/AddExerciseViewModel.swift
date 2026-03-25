@@ -15,11 +15,14 @@ final class AddExerciseViewModel {
     var weight: Double = 0
     var durationMinutes: Double = 0
 
-    /// Tracks the save operation. `.loaded(UUID)` means success → view should dismiss.
+    /// Tracks the save operation. `.loaded(UUID)` means success -> view should dismiss.
     var saveState: Loadable<UUID> = .notRequested
 
+    /// Library entries fetched from interactor.
+    private(set) var libraryEntries: [ExerciseLibraryEntryDTO]?
+
     /// Suggestions filtered from the exercise library.
-    private(set) var filteredSuggestions: [ExerciseLibraryEntry] = []
+    private(set) var filteredSuggestions: [ExerciseLibraryEntryDTO] = []
 
     private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
     /// Internal (not private) so AddExerciseView can read it for the navigationTitle.
@@ -29,15 +32,28 @@ final class AddExerciseViewModel {
         self.sessionID = sessionID
     }
 
-    /// Wire the real interactor. Call from `.onAppear`.
+    /// Wire the real interactor. Call from `.task`.
     func configure(interactor: any WorkoutsInteractor) {
         self.interactor = interactor
     }
 
+    /// Fetch library entries from the interactor.
+    func loadLibraryEntries() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let entries = try await interactor.fetchLibraryEntries()
+                libraryEntries = entries
+                updateSuggestions(from: entries)
+            } catch {
+                libraryEntries = []
+            }
+        }
+    }
+
     /// Filter library entries to those matching the current exerciseType and name prefix.
     /// Excludes exact matches (the name the user already typed).
-    /// Call from `.onChange(of: vm.name)` and `.onChange(of: vm.exerciseType)`.
-    func updateSuggestions(from library: [ExerciseLibraryEntry]) {
+    func updateSuggestions(from library: [ExerciseLibraryEntryDTO]) {
         filteredSuggestions = library.filter {
             $0.type == exerciseType
             && $0.name.localizedCaseInsensitiveContains(name)
@@ -45,8 +61,7 @@ final class AddExerciseViewModel {
         }
     }
 
-    /// Build the ExerciseInput and start the async save. Uses manual Task + Loadable
-    /// because LoadableSubject.load {} requires a Binding, unavailable in @Observable classes.
+    /// Build the ExerciseInput and start the async save.
     func save() {
         let input: ExerciseInput
         switch exerciseType {

@@ -2,29 +2,59 @@
 import Foundation
 import Observation
 
-/// Holds the unified exercise list for a session.
-/// Merges strength and cardio arrays only when either changes, not on every render.
+/// Holds session detail data fetched via interactor.
+/// Merges strength and cardio arrays only when session data changes.
 @Observable
 @MainActor
 final class SessionDetailViewModel {
 
+    /// Async state for session fetching.
+    private(set) var session: Loadable<WorkoutSessionDTO> = .notRequested
+
     /// All exercises for the session as `AnalyticsTrackable`, strength first.
     private(set) var allExercises: [any AnalyticsTrackable] = []
 
-    private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
+    /// The session's date, for the navigation title.
+    private(set) var sessionDate: Date?
 
-    /// Wire the real interactor. Call from `.onAppear`.
+    private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
+    let sessionID: UUID
+
+    init(sessionID: UUID) {
+        self.sessionID = sessionID
+    }
+
+    /// Wire the real interactor. Call from `.task`.
     func configure(interactor: any WorkoutsInteractor) {
         self.interactor = interactor
     }
 
-    /// Call from `.onChange(of: session.strengthExercises, initial: true)` and
-    /// `.onChange(of: session.cardioExercises, initial: true)`.
-    func updateExercises(strength: [StrengthExercise], cardio: [CardioExercise]) {
-        allExercises = (strength as [any AnalyticsTrackable]) + (cardio as [any AnalyticsTrackable])
+    /// Fetch session from the interactor.
+    func loadSession() {
+        let cancelBag = CancelBag()
+        session.setIsLoading(cancelBag: cancelBag)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let fetched = try await interactor.fetchSession(id: sessionID)
+                session = .loaded(fetched)
+                sessionDidChange(fetched)
+            } catch {
+                session = .failed(error)
+            }
+        }
+        task.store(in: cancelBag)
     }
 
-    func deleteExercise(id: UUID, type: ExerciseType, from sessionID: UUID) async throws {
+    /// Update derived state from a fetched session DTO.
+    func sessionDidChange(_ dto: WorkoutSessionDTO) {
+        sessionDate = dto.date
+        allExercises = (dto.strengthExercises as [any AnalyticsTrackable])
+                     + (dto.cardioExercises as [any AnalyticsTrackable])
+    }
+
+    func deleteExercise(id: UUID, type: ExerciseType) async throws {
         try await interactor.deleteExercise(id: id, type: type, from: sessionID)
+        loadSession()
     }
 }

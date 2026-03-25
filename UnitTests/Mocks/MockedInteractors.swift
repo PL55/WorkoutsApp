@@ -27,11 +27,19 @@ final class MockedWorkoutsInteractor: Mock, WorkoutsInteractor {
         case deleteSession(id: UUID)
         case deleteExercise(id: UUID, type: ExerciseType, sessionID: UUID)
         case progressEntries(exerciseName: String)
+        case fetchSessions
+        case fetchSession(id: UUID)
+        case fetchLibraryEntries
+        case fetchExerciseOverviews(type: ExerciseType)
     }
 
     var actions: MockActions<Action>
     var addExerciseResult: Result<UUID, Error> = .success(UUID())
     var progressEntriesResult: Result<[ProgressEntry], Error> = .success([])
+    var fetchSessionsResult: Result<[WorkoutSessionDTO], Error> = .success([])
+    var fetchSessionResult: Result<WorkoutSessionDTO, Error> = .failure(SessionNotFoundError())
+    var fetchLibraryEntriesResult: Result<[ExerciseLibraryEntryDTO], Error> = .success([])
+    var fetchExerciseOverviewsResult: Result<[ExerciseOverviewDTO], Error> = .success([])
 
     init(expected: [Action]) {
         self.actions = .init(expected: expected)
@@ -53,5 +61,25 @@ final class MockedWorkoutsInteractor: Mock, WorkoutsInteractor {
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry] {
         register(.progressEntries(exerciseName: exerciseName))
         return try progressEntriesResult.get()
+    }
+
+    func fetchSessions() async throws -> [WorkoutSessionDTO] {
+        register(.fetchSessions)
+        return try fetchSessionsResult.get()
+    }
+
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
+        register(.fetchSession(id: id))
+        return try fetchSessionResult.get()
+    }
+
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
+        register(.fetchLibraryEntries)
+        return try fetchLibraryEntriesResult.get()
+    }
+
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] {
+        register(.fetchExerciseOverviews(type: type))
+        return try fetchExerciseOverviewsResult.get()
     }
 }

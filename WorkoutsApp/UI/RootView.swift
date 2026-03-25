@@ -32,9 +32,8 @@ struct RootView: View {
             ProgressView("Loading…")
                 .onAppear { bootstrap() }
         case .loaded(let env):
-            SessionListView()
+            ExerciseListView()
                 .modifier(RootViewAppearance())
-                .modelContainer(env.modelContainer)
                 .inject(env.diContainer)
         case .failed(let error):
             errorView(error)

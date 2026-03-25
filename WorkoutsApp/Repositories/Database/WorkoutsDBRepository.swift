@@ -12,6 +12,11 @@ protocol WorkoutsDBRepository {
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry]
     func libraryContains(name: String) async throws -> Bool
     func upsertLibraryEntry(name: String, type: ExerciseType) async throws
+    // New read methods — return DTOs, no SwiftData types leak out
+    func fetchSessions() async throws -> [WorkoutSessionDTO]
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO]
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO]
 }
 
 // MARK: - MainDBRepository conformance
@@ -63,16 +68,19 @@ extension MainDBRepository: WorkoutsDBRepository {
         let strengthFetch = FetchDescriptor<StrengthExercise>(predicate: #Predicate { $0.name == exerciseName })
         let cardioFetch   = FetchDescriptor<CardioExercise>(predicate: #Predicate { $0.name == exerciseName })
         let strength = try modelContext.fetch(strengthFetch).compactMap { e -> ProgressEntry? in
-            guard let date = e.session?.date else { return nil }
-            return ProgressEntry(id: e.id, date: date, exerciseType: .strength,
-                                 value: e.analyticsValue, label: e.analyticsLabel)
+            guard let session = e.session else { return nil }
+            return ProgressEntry(id: e.id, sessionID: session.id, date: session.date,
+                                 exerciseType: .strength, value: e.analyticsValue, label: e.analyticsLabel)
         }
         let cardio = try modelContext.fetch(cardioFetch).compactMap { e -> ProgressEntry? in
-            guard let date = e.session?.date else { return nil }
-            return ProgressEntry(id: e.id, date: date, exerciseType: .cardio,
-                                 value: e.analyticsValue, label: e.analyticsLabel)
+            guard let session = e.session else { return nil }
+            return ProgressEntry(id: e.id, sessionID: session.id, date: session.date,
+                                 exerciseType: .cardio, value: e.analyticsValue, label: e.analyticsLabel)
         }
-        return (strength + cardio).sorted { $0.date < $1.date }
+        let all = strength + cardio
+        let deduplicated = Dictionary(grouping: all, by: \.sessionID)
+            .compactMap { _, entries in entries.max(by: { $0.value < $1.value }) }
+        return deduplicated.sorted { $0.date < $1.date }
     }
 
     func libraryContains(name: String) async throws -> Bool {
@@ -85,6 +93,55 @@ extension MainDBRepository: WorkoutsDBRepository {
         guard try modelContext.fetch(descriptor).isEmpty else { return }
         modelContext.insert(ExerciseLibraryEntry(name: name, type: type))
         try modelContext.save()
+    }
+
+    func fetchSessions() async throws -> [WorkoutSessionDTO] {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        return try modelContext.fetch(descriptor).map { $0.toDTO() }
+    }
+
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
+        let descriptor = FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.id == id })
+        guard let session = try modelContext.fetch(descriptor).first else {
+            throw SessionNotFoundError()
+        }
+        return session.toDTO()
+    }
+
+    func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
+        let descriptor = FetchDescriptor<ExerciseLibraryEntry>(
+            sortBy: [SortDescriptor(\.name)]
+        )
+        return try modelContext.fetch(descriptor).map { $0.toDTO() }
+    }
+
+    func fetchExerciseOverviews(type: ExerciseType) async throws -> [ExerciseOverviewDTO] {
+        typealias Row = (name: String, date: Date, value: Double, label: String)
+        let rows: [Row]
+        switch type {
+        case .strength:
+            rows = try modelContext.fetch(FetchDescriptor<StrengthExercise>()).compactMap { e in
+                guard let session = e.session else { return nil }
+                return (e.name, session.date, e.analyticsValue, e.analyticsLabel)
+            }
+        case .cardio:
+            rows = try modelContext.fetch(FetchDescriptor<CardioExercise>()).compactMap { e in
+                guard let session = e.session else { return nil }
+                return (e.name, session.date, e.analyticsValue, e.analyticsLabel)
+            }
+        }
+        return Dictionary(grouping: rows, by: \.name).compactMap { name, entries -> ExerciseOverviewDTO? in
+            guard let latest = entries.max(by: { $0.date < $1.date }),
+                  let best   = entries.max(by: { $0.value < $1.value })
+            else { return nil }
+            return ExerciseOverviewDTO(
+                id: name, name: name, exerciseType: type,
+                bestValue: best.value, latestValue: latest.value,
+                lastDate: latest.date, analyticsLabel: latest.label
+            )
+        }
     }
 
     // MARK: - Private helpers
@@ -102,5 +159,36 @@ extension MainDBRepository: WorkoutsDBRepository {
             session.cardioExercises.append(e)
             modelContext.insert(e)
         }
+    }
+}
+
+// MARK: - DTO Mapping
+
+private extension WorkoutSession {
+    func toDTO() -> WorkoutSessionDTO {
+        WorkoutSessionDTO(
+            id: id,
+            date: date,
+            strengthExercises: strengthExercises.map { $0.toDTO() },
+            cardioExercises: cardioExercises.map { $0.toDTO() }
+        )
+    }
+}
+
+private extension StrengthExercise {
+    func toDTO() -> StrengthExerciseDTO {
+        StrengthExerciseDTO(id: id, name: name, sets: sets, reps: reps, weight: weight)
+    }
+}
+
+private extension CardioExercise {
+    func toDTO() -> CardioExerciseDTO {
+        CardioExerciseDTO(id: id, name: name, durationMinutes: durationMinutes)
+    }
+}
+
+private extension ExerciseLibraryEntry {
+    func toDTO() -> ExerciseLibraryEntryDTO {
+        ExerciseLibraryEntryDTO(id: id, name: name, type: type)
     }
 }
