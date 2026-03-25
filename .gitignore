@@ -185,3 +185,4 @@ docs/build/
 
 # Custom - Project specific
 # Add any project-specific ignores below
+.worktrees/
