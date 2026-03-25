@@ -1,11 +1,4 @@
-//
-//  ModelContainer.swift
-//  WorkoutsApp
-//
-//  Created by Alexey on 7/11/24.
-//  Copyright © 2024 Alexey Naumov. All rights reserved.
-//
-
+// WorkoutsApp/Repositories/Database/ModelContainer.swift
 import SwiftData
 
 extension ModelContainer {
@@ -13,9 +6,16 @@ extension ModelContainer {
     static func appModelContainer(
         inMemoryOnly: Bool = false, isStub: Bool = false
     ) throws -> ModelContainer {
-        let schema = Schema.appSchema
-        let modelConfiguration = ModelConfiguration(isStub ? "stub" : nil, schema: schema, isStoredInMemoryOnly: inMemoryOnly)
-        return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let modelConfig = ModelConfiguration(
+            isStub ? "stub" : nil,
+            isStoredInMemoryOnly: inMemoryOnly
+        )
+        if inMemoryOnly {
+            // In-memory stores start fresh — no migration needed, and running the
+            // migration plan concurrently across parallel test suites causes crashes.
+            return try ModelContainer(for: Schema(SchemaV2.models), configurations: modelConfig)
+        }
+        return try ModelContainer(migrationPlan: AppMigrationPlan.self, configurations: modelConfig)
     }
 
     static var stub: ModelContainer {

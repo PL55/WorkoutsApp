@@ -9,7 +9,7 @@ import SwiftUI
 
     @Test func rendersLoadingState() async throws {
         let sessionID = UUID()
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed,
                                     strengthExercises: [StrengthExerciseDTO(id: UUID(), name: "Bench Press", sets: 3, reps: 8, weight: 60)],
                                     cardioExercises: [])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
@@ -37,7 +37,7 @@ import SwiftUI
     @Test func rendersStrengthDetail() async throws {
         let sessionID = UUID()
         let bench = StrengthExerciseDTO(id: UUID(), name: "Bench Press", sets: 4, reps: 6, weight: 80)
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now, strengthExercises: [bench], cardioExercises: [])
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed, strengthExercises: [bench], cardioExercises: [])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
         mocked.fetchSessionResult = .success(dto)
         let container = DIContainer(interactors: .init(workouts: mocked))
@@ -51,7 +51,7 @@ import SwiftUI
     @Test func rendersCardioDetail() async throws {
         let sessionID = UUID()
         let run = CardioExerciseDTO(id: UUID(), name: "Running", durationMinutes: 30)
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now, strengthExercises: [], cardioExercises: [run])
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed, strengthExercises: [], cardioExercises: [run])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
         mocked.fetchSessionResult = .success(dto)
         let container = DIContainer(interactors: .init(workouts: mocked))

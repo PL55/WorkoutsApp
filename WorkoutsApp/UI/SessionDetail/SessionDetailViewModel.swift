@@ -2,20 +2,20 @@
 import Foundation
 import Observation
 
-/// Holds session detail data fetched via interactor.
-/// Merges strength and cardio arrays only when session data changes.
 @Observable
 @MainActor
 final class SessionDetailViewModel {
 
     /// Async state for session fetching.
     private(set) var session: Loadable<WorkoutSessionDTO> = .notRequested
-
-    /// All exercises for the session as `AnalyticsTrackable`, strength first.
+    /// All exercises merged, strength first.
     private(set) var allExercises: [any AnalyticsTrackable] = []
-
-    /// The session's date, for the navigation title.
+    /// The session's display name (custom name or date-formatted fallback).
+    private(set) var sessionDisplayName: String = ""
+    /// The session's date, for display.
     private(set) var sessionDate: Date?
+    /// The session's lifecycle status.
+    private(set) var sessionStatus: SessionStatus = .completed
 
     private var interactor: any WorkoutsInteractor = StubWorkoutsInteractor()
     let sessionID: UUID
@@ -24,12 +24,12 @@ final class SessionDetailViewModel {
         self.sessionID = sessionID
     }
 
-    /// Wire the real interactor. Call from `.task`.
     func configure(interactor: any WorkoutsInteractor) {
         self.interactor = interactor
     }
 
-    /// Fetch session from the interactor.
+    // MARK: - Load
+
     func loadSession() {
         let cancelBag = CancelBag()
         session.setIsLoading(cancelBag: cancelBag)
@@ -46,15 +46,42 @@ final class SessionDetailViewModel {
         task.store(in: cancelBag)
     }
 
-    /// Update derived state from a fetched session DTO.
     func sessionDidChange(_ dto: WorkoutSessionDTO) {
         sessionDate = dto.date
+        sessionDisplayName = dto.displayName
+        sessionStatus = dto.status
         allExercises = (dto.strengthExercises as [any AnalyticsTrackable])
                      + (dto.cardioExercises as [any AnalyticsTrackable])
     }
 
+    // MARK: - Exercise mutations
+
     func deleteExercise(id: UUID, type: ExerciseType) async throws {
         try await interactor.deleteExercise(id: id, type: type, from: sessionID)
         loadSession()
+    }
+
+    // MARK: - Session lifecycle
+
+    func endSession() {
+        let task = Task { [weak self] in
+            guard let self else { return }
+            try? await interactor.endSession(id: sessionID)
+            loadSession()
+        }
+        _ = task
+    }
+
+    func cancelSession() async throws {
+        try await interactor.cancelSession(id: sessionID)
+    }
+
+    func renameSession(name: String) {
+        let task = Task { [weak self] in
+            guard let self else { return }
+            try? await interactor.renameSession(id: sessionID, name: name)
+            loadSession()
+        }
+        _ = task
     }
 }

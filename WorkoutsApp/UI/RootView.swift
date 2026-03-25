@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// Manages app launch state and surfaces database errors with a retry option.
-/// Renders a ProgressView during bootstrap, SessionListView on success,
+/// Renders a ProgressView during bootstrap, the main TabView on success,
 /// and an error screen with a Retry button on failure.
 struct RootView: View {
 
@@ -10,12 +10,10 @@ struct RootView: View {
 
     let inspection = Inspection<Self>()
 
-    /// Production init — starts in .notRequested; bootstrap fires from .onAppear.
     init() {
         _launchState = State(initialValue: .notRequested)
     }
 
-    /// Testing init — allows injecting a specific launch state directly.
     init(launchState: Loadable<AppEnvironment>) {
         _launchState = State(initialValue: launchState)
     }
@@ -32,9 +30,18 @@ struct RootView: View {
             ProgressView("Loading…")
                 .onAppear { bootstrap() }
         case .loaded(let env):
-            ExerciseListView()
-                .modifier(RootViewAppearance())
-                .inject(env.diContainer)
+            TabView {
+                SessionListView()
+                    .tabItem {
+                        Label("Sessions", systemImage: "list.bullet.clipboard")
+                    }
+                ExerciseListView()
+                    .tabItem {
+                        Label("Exercises", systemImage: "dumbbell")
+                    }
+            }
+            .modifier(RootViewAppearance())
+            .inject(env.diContainer)
         case .failed(let error):
             errorView(error)
         }
@@ -53,9 +60,6 @@ struct RootView: View {
         }
     }
 
-    /// Starts the async bootstrap and updates launchState.
-    /// Uses manual Task + Loadable (not $binding.load {}) for consistency
-    /// with the ViewModel pattern — no Binding is available here.
     private func bootstrap() {
         guard !launchState.isLoading else { return }
         let cancelBag = CancelBag()
@@ -70,5 +74,3 @@ struct RootView: View {
         task.store(in: cancelBag)
     }
 }
-
-// Loadable.isLoading is declared as an internal extension in Loadable.swift.

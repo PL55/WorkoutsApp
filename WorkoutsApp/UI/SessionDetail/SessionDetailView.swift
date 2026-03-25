@@ -6,17 +6,19 @@ struct SessionDetailView: View {
     @Binding var navigationPath: NavigationPath
 
     @State private var vm: SessionDetailViewModel
+    @State private var showRenameAlert = false
+    @State private var renameText = ""
+    @State private var showCancelConfirmation = false
     @Environment(\.injected) private var injected: DIContainer
+    @Environment(\.dismiss) private var dismiss
 
     let inspection = Inspection<Self>()
 
-    /// Production init — creates a fresh VM for the given session ID.
     init(sessionID: UUID, navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
         _vm = State(initialValue: SessionDetailViewModel(sessionID: sessionID))
         self._navigationPath = navigationPath
     }
 
-    /// Testing init — allows injecting a pre-configured VM.
     init(sessionID: UUID, navigationPath: Binding<NavigationPath> = .constant(NavigationPath()), viewModel: SessionDetailViewModel) {
         _vm = State(initialValue: viewModel)
         self._navigationPath = navigationPath
@@ -24,15 +26,31 @@ struct SessionDetailView: View {
 
     var body: some View {
         content
-            .navigationTitle(vm.sessionDate?.formatted(date: .abbreviated, time: .omitted) ?? "Session")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        navigationPath.append(AddExerciseDestination(sessionID: vm.sessionID))
-                    } label: {
-                        Image(systemName: "plus")
+            .navigationTitle(vm.sessionDisplayName.isEmpty ? "Session" : vm.sessionDisplayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
+            .alert("Rename Session", isPresented: $showRenameAlert) {
+                TextField("Session name", text: $renameText)
+                Button("Save") {
+                    let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty { vm.renameSession(name: trimmed) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .confirmationDialog(
+                "Cancel Session",
+                isPresented: $showCancelConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Cancel Session", role: .destructive) {
+                    Task {
+                        try? await vm.cancelSession()
+                        navigationPath.removeLast()
                     }
                 }
+                Button("Keep Session", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete the session and all its exercises.")
             }
             .task {
                 vm.configure(interactor: injected.interactors.workouts)
@@ -65,6 +83,35 @@ struct SessionDetailView: View {
             }
             .onDelete { indexSet in
                 deleteExercises(offsets: indexSet)
+            }
+
+            // Active-only actions at the bottom of the list
+            if vm.sessionStatus == .active {
+                Section {
+                    Button("End Session") { vm.endSession() }
+                        .frame(maxWidth: .infinity)
+                    Button("Cancel Session", role: .destructive) {
+                        showCancelConfirmation = true
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                navigationPath.append(AddExerciseDestination(sessionID: vm.sessionID))
+            } label: {
+                Image(systemName: "plus")
+            }
+        }
+        ToolbarItem(placement: .secondaryAction) {
+            Button("Rename") {
+                renameText = vm.sessionDisplayName
+                showRenameAlert = true
             }
         }
     }

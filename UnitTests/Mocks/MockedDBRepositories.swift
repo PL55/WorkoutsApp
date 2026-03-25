@@ -15,34 +15,67 @@ extension ModelContainer {
 final class MockedWorkoutsDBRepository: Mock, WorkoutsDBRepository {
 
     enum Action: Equatable {
+        case startSession(name: String)
+        case endSession(id: UUID)
+        case cancelSession(id: UUID)
+        case renameSession(id: UUID, name: String)
         case saveNewSession(input: ExerciseInput)
         case addExercise(input: ExerciseInput, sessionID: UUID)
         case deleteSession(id: UUID)
         case deleteExercise(id: UUID, type: ExerciseType, sessionID: UUID)
+        case fetchActiveSession
+        case fetchAllSessions
+        case fetchSessions
+        case fetchSession(id: UUID)
         case progressEntries(exerciseName: String)
         case libraryContains(name: String)
         case upsertLibraryEntry(name: String, type: ExerciseType)
-        case fetchSessions
-        case fetchSession(id: UUID)
         case fetchLibraryEntries
         case fetchExerciseOverviews(type: ExerciseType)
     }
 
     var actions: MockActions<Action>
+
+    var startSessionResult: Result<UUID, Error> = .success(UUID())
+    var endSessionResult: Result<Void, Error> = .success(())
+    var cancelSessionResult: Result<Void, Error> = .success(())
+    var renameSessionResult: Result<Void, Error> = .success(())
     var saveNewSessionResult: Result<UUID, Error> = .success(UUID())
     var addExerciseResult: Result<Void, Error> = .success(())
     var deleteSessionResult: Result<Void, Error> = .success(())
     var deleteExerciseResult: Result<Void, Error> = .success(())
+    var fetchActiveSessionResult: Result<WorkoutSessionDTO?, Error> = .success(nil)
+    var fetchAllSessionsResult: Result<[WorkoutSessionDTO], Error> = .success([])
+    var fetchSessionsResult: Result<[WorkoutSessionDTO], Error> = .success([])
+    var fetchSessionResult: Result<WorkoutSessionDTO, Error> = .failure(SessionNotFoundError())
     var progressEntriesResult: Result<[ProgressEntry], Error> = .success([])
     var libraryContainsResult: Result<Bool, Error> = .success(false)
     var upsertLibraryEntryResult: Result<Void, Error> = .success(())
-    var fetchSessionsResult: Result<[WorkoutSessionDTO], Error> = .success([])
-    var fetchSessionResult: Result<WorkoutSessionDTO, Error> = .failure(SessionNotFoundError())
     var fetchLibraryEntriesResult: Result<[ExerciseLibraryEntryDTO], Error> = .success([])
     var fetchExerciseOverviewsResult: Result<[ExerciseOverviewDTO], Error> = .success([])
 
     init(expected: [Action]) {
         self.actions = .init(expected: expected)
+    }
+
+    func startSession(name: String) async throws -> UUID {
+        register(.startSession(name: name))
+        return try startSessionResult.get()
+    }
+
+    func endSession(id: UUID) async throws {
+        register(.endSession(id: id))
+        try endSessionResult.get()
+    }
+
+    func cancelSession(id: UUID) async throws {
+        register(.cancelSession(id: id))
+        try cancelSessionResult.get()
+    }
+
+    func renameSession(id: UUID, name: String) async throws {
+        register(.renameSession(id: id, name: name))
+        try renameSessionResult.get()
     }
 
     func saveNewSession(date: Date, with input: ExerciseInput) async throws -> UUID {
@@ -65,6 +98,26 @@ final class MockedWorkoutsDBRepository: Mock, WorkoutsDBRepository {
         try deleteExerciseResult.get()
     }
 
+    func fetchActiveSession() async throws -> WorkoutSessionDTO? {
+        register(.fetchActiveSession)
+        return try fetchActiveSessionResult.get()
+    }
+
+    func fetchAllSessions() async throws -> [WorkoutSessionDTO] {
+        register(.fetchAllSessions)
+        return try fetchAllSessionsResult.get()
+    }
+
+    func fetchSessions() async throws -> [WorkoutSessionDTO] {
+        register(.fetchSessions)
+        return try fetchSessionsResult.get()
+    }
+
+    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
+        register(.fetchSession(id: id))
+        return try fetchSessionResult.get()
+    }
+
     func progressEntries(for exerciseName: String) async throws -> [ProgressEntry] {
         register(.progressEntries(exerciseName: exerciseName))
         return try progressEntriesResult.get()
@@ -78,16 +131,6 @@ final class MockedWorkoutsDBRepository: Mock, WorkoutsDBRepository {
     func upsertLibraryEntry(name: String, type: ExerciseType) async throws {
         register(.upsertLibraryEntry(name: name, type: type))
         try upsertLibraryEntryResult.get()
-    }
-
-    func fetchSessions() async throws -> [WorkoutSessionDTO] {
-        register(.fetchSessions)
-        return try fetchSessionsResult.get()
-    }
-
-    func fetchSession(id: UUID) async throws -> WorkoutSessionDTO {
-        register(.fetchSession(id: id))
-        return try fetchSessionResult.get()
     }
 
     func fetchLibraryEntries() async throws -> [ExerciseLibraryEntryDTO] {
