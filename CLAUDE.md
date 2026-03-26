@@ -177,6 +177,30 @@ xcodebuild test -scheme WorkoutsApp -destination 'platform=iOS Simulator,name=iP
 
 ---
 
+## Critical Fix: SwiftData Migration Plan Causing Persistent Store Corruption
+
+**Issue**: After adding migration plan (`AppMigrationPlan`) to handle schema versioning, data persistence failed silently. `modelContext.insert()` succeeded but `modelContext.fetch()` returned 0 records immediately after, even from the same `@ModelActor` context. CoreData logs showed recovery attempts on every launch.
+
+**Root Cause**: The `SchemaMigrationPlan` (even with a lightweight migration from SchemaV1 → SchemaV2) was corrupting the persistent store on fresh installs. Since the app has no legacy data to migrate, using the migration plan was unnecessary and harmful.
+
+**Fix** (`ModelContainer.swift`): Removed `AppMigrationPlan` entirely. Create `ModelContainer` with just the current schema (`SchemaV2`):
+```swift
+let config = ModelConfiguration(
+    schema: Schema([WorkoutSession.self, StrengthExercise.self, CardioExercise.self, ExerciseLibraryEntry.self]),
+    isStoredInMemoryOnly: inMemoryOnly
+)
+return try ModelContainer(for: config)
+```
+
+**When to Re-introduce Migrations**: If you need to evolve the schema in a future version while maintaining user data, implement proper versioning:
+1. Create a new `SchemaV3` with the updated model definitions
+2. Define a clean `MigrationStage` with explicit mapping logic (not just `lightweight`)
+3. Add `SchemaMigrationPlan` with both old and new schemas
+
+For now, with no existing user data to preserve, avoid migration complexity entirely.
+
+---
+
 ## Questions to Ask When Modifying
 
 - [ ] Which layer? (View / ViewModel / Interactor / Repository)

@@ -1,5 +1,6 @@
 // WorkoutsApp/Repositories/Database/ModelContainer.swift
 import SwiftData
+import Foundation
 
 extension ModelContainer {
 
@@ -10,12 +11,14 @@ extension ModelContainer {
             isStub ? "stub" : nil,
             isStoredInMemoryOnly: inMemoryOnly
         )
+
         if inMemoryOnly {
             // In-memory stores start fresh — no migration needed, and running the
             // migration plan concurrently across parallel test suites causes crashes.
             return try ModelContainer(for: Schema(SchemaV2.models), configurations: modelConfig)
         }
-        return try ModelContainer(migrationPlan: AppMigrationPlan.self, configurations: modelConfig)
+
+        return try ModelContainer(for: Schema(SchemaV2.models), configurations: modelConfig)
     }
 
     static var stub: ModelContainer {
@@ -27,5 +30,12 @@ extension ModelContainer {
     }
 }
 
-@ModelActor
-final actor MainDBRepository { }
+final actor MainDBRepository {
+    let modelContainer: ModelContainer
+    let modelContext: ModelContext
+
+    init(modelContainer: ModelContainer) {
+        self.modelContainer = modelContainer
+        self.modelContext = ModelContext(modelContainer)
+    }
+}
