@@ -16,7 +16,7 @@ import SwiftUI
     }
 
     @Test func rendersExerciseRows() async throws {
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed,
                                      strengthExercises: [strengthDTO], cardioExercises: [])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
         mocked.fetchSessionResult = .success(dto)

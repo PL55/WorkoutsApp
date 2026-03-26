@@ -8,7 +8,7 @@ import Foundation
 
     @Test func loadSessionTransitionsToLoaded() async throws {
         let sessionID = UUID()
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed,
                                     strengthExercises: [StrengthExerciseDTO(id: UUID(), name: "Bench Press", sets: 3, reps: 8, weight: 60)],
                                     cardioExercises: [])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
@@ -48,7 +48,7 @@ import Foundation
         let sessionID = UUID()
         let bench = StrengthExerciseDTO(id: UUID(), name: "Bench Press", sets: 4, reps: 6, weight: 80)
         let squat = StrengthExerciseDTO(id: UUID(), name: "Squat", sets: 3, reps: 5, weight: 100)
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed,
                                     strengthExercises: [bench, squat],
                                     cardioExercises: [])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])
@@ -73,7 +73,7 @@ import Foundation
     @Test func loadedSessionContainsCardioExerciseByName() async throws {
         let sessionID = UUID()
         let run = CardioExerciseDTO(id: UUID(), name: "Running", durationMinutes: 30)
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now,
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed,
                                     strengthExercises: [],
                                     cardioExercises: [run])
         let mocked = MockedWorkoutsInteractor(expected: [.fetchSession(id: sessionID)])

@@ -14,6 +14,128 @@ import Foundation
         mockedDB = MockedWorkoutsDBRepository(expected: [])
         sut = RealWorkoutsInteractor(dbRepository: mockedDB)
         mockedDB.saveNewSessionResult = .success(fixedSessionID)
+        mockedDB.startSessionResult = .success(fixedSessionID)
+    }
+}
+
+// MARK: - startSession
+
+final class StartSessionTests: WorkoutsInteractorTests {
+
+    @Test func delegatesToRepository() async throws {
+        mockedDB.actions = .init(expected: [.startSession(name: "Leg Day")])
+        let id = try await sut.startSession(name: "Leg Day")
+        #expect(id == fixedSessionID)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - endSession
+
+final class EndSessionTests: WorkoutsInteractorTests {
+
+    @Test func delegatesToRepository() async throws {
+        let sessionID = UUID()
+        mockedDB.actions = .init(expected: [.endSession(id: sessionID)])
+        try await sut.endSession(id: sessionID)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - cancelSession
+
+final class CancelSessionTests: WorkoutsInteractorTests {
+
+    @Test func delegatesToRepository() async throws {
+        let sessionID = UUID()
+        mockedDB.actions = .init(expected: [.cancelSession(id: sessionID)])
+        try await sut.cancelSession(id: sessionID)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - renameSession
+
+final class RenameSessionTests: WorkoutsInteractorTests {
+
+    @Test func delegatesToRepository() async throws {
+        let sessionID = UUID()
+        mockedDB.actions = .init(expected: [.renameSession(id: sessionID, name: "Push Day")])
+        try await sut.renameSession(id: sessionID, name: "Push Day")
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchActiveSession
+
+final class FetchActiveSessionTests: WorkoutsInteractorTests {
+
+    @Test func forwardsResultFromRepository() async throws {
+        let dto = WorkoutSessionDTO(id: UUID(), date: .now, name: "My Session", status: .active,
+                                    strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchActiveSession])
+        mockedDB.fetchActiveSessionResult = .success(dto)
+        let result = try await sut.fetchActiveSession()
+        #expect(result?.id == dto.id)
+        #expect(result?.status == .active)
+        mockedDB.verify()
+    }
+
+    @Test func returnsNilWhenNoActiveSession() async throws {
+        mockedDB.actions = .init(expected: [.fetchActiveSession])
+        mockedDB.fetchActiveSessionResult = .success(nil)
+        let result = try await sut.fetchActiveSession()
+        #expect(result == nil)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchAllSessions
+
+final class FetchAllSessionsTests: WorkoutsInteractorTests {
+
+    @Test func forwardsAllSessionsFromRepository() async throws {
+        let active = WorkoutSessionDTO(id: UUID(), date: .now, name: "", status: .active,
+                                       strengthExercises: [], cardioExercises: [])
+        let completed = WorkoutSessionDTO(id: UUID(), date: .now, name: "", status: .completed,
+                                          strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchAllSessions])
+        mockedDB.fetchAllSessionsResult = .success([active, completed])
+        let result = try await sut.fetchAllSessions()
+        #expect(result.count == 2)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchSessions (completed only)
+
+final class FetchSessionsTests: WorkoutsInteractorTests {
+
+    @Test func forwardsCompletedSessionsFromRepository() async throws {
+        let dto = WorkoutSessionDTO(id: UUID(), date: .now, name: "", status: .completed,
+                                    strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchSessions])
+        mockedDB.fetchSessionsResult = .success([dto])
+        let result = try await sut.fetchSessions()
+        #expect(result.count == 1)
+        #expect(result[0].id == dto.id)
+        mockedDB.verify()
+    }
+}
+
+// MARK: - fetchSession
+
+final class FetchSessionTests: WorkoutsInteractorTests {
+
+    @Test func forwardsSingleSessionFromRepository() async throws {
+        let sessionID = UUID()
+        let dto = WorkoutSessionDTO(id: sessionID, date: .now, name: "", status: .completed,
+                                    strengthExercises: [], cardioExercises: [])
+        mockedDB.actions = .init(expected: [.fetchSession(id: sessionID)])
+        mockedDB.fetchSessionResult = .success(dto)
+        let result = try await sut.fetchSession(id: sessionID)
+        #expect(result.id == sessionID)
+        mockedDB.verify()
     }
 }
 
@@ -106,36 +228,6 @@ final class ProgressEntriesTests: WorkoutsInteractorTests {
     }
 }
 
-// MARK: - fetchSessions
-
-final class FetchSessionsTests: WorkoutsInteractorTests {
-
-    @Test func forwardsSessionsFromRepository() async throws {
-        let dto = WorkoutSessionDTO(id: UUID(), date: .now, strengthExercises: [], cardioExercises: [])
-        mockedDB.actions = .init(expected: [.fetchSessions])
-        mockedDB.fetchSessionsResult = .success([dto])
-        let result = try await sut.fetchSessions()
-        #expect(result.count == 1)
-        #expect(result[0].id == dto.id)
-        mockedDB.verify()
-    }
-}
-
-// MARK: - fetchSession
-
-final class FetchSessionTests: WorkoutsInteractorTests {
-
-    @Test func forwardsSingleSessionFromRepository() async throws {
-        let sessionID = UUID()
-        let dto = WorkoutSessionDTO(id: sessionID, date: .now, strengthExercises: [], cardioExercises: [])
-        mockedDB.actions = .init(expected: [.fetchSession(id: sessionID)])
-        mockedDB.fetchSessionResult = .success(dto)
-        let result = try await sut.fetchSession(id: sessionID)
-        #expect(result.id == sessionID)
-        mockedDB.verify()
-    }
-}
-
 // MARK: - fetchLibraryEntries
 
 final class FetchLibraryEntriesTests: WorkoutsInteractorTests {
@@ -180,6 +272,15 @@ final class FetchExerciseOverviewsTests: WorkoutsInteractorTests {
 final class StubWorkoutsInteractorTests: WorkoutsInteractorTests {
     @Test func stubReturnsDefaults() async throws {
         let stub = StubWorkoutsInteractor()
+        let newID = try await stub.startSession(name: "Test")
+        #expect(newID != nil)
+        try await stub.endSession(id: UUID())
+        try await stub.cancelSession(id: UUID())
+        try await stub.renameSession(id: UUID(), name: "Renamed")
+        let active = try await stub.fetchActiveSession()
+        #expect(active == nil)
+        let all = try await stub.fetchAllSessions()
+        #expect(all.isEmpty)
         let id = try await stub.addExercise(to: nil, input: .cardio(name: "Run", durationMinutes: 20))
         #expect(id != nil)
         try await stub.deleteSession(id: UUID())
